@@ -3,10 +3,11 @@
 #include "enemy.h"
 #include "stage_play.h"
 #include "stage_play/collisions.h"
+#include "hitbox_view.h"
 #define TODO_AREA "stage_play" /* prefix of the TODO traces of this file */
 
 /* --- collisions (B6 $9535) --- */
-static void entity_hitbox(Game *g, int x, uint8_t yi) /* B6 $9B11 GetEntityHitboxX */
+static void entity_hitbox_raw(Game *g, int x, uint8_t yi) /* B6 $9B11 GetEntityHitboxX */
 {
     uint8_t id = M(EntAnimId + x), a;
     if (M(EntType + x) < 0x80) {
@@ -44,6 +45,11 @@ static void entity_hitbox(Game *g, int x, uint8_t yi) /* B6 $9B11 GetEntityHitbo
     }
 }
 
+static void entity_hitbox(Game *g, int x, uint8_t yi) {
+    entity_hitbox_raw(g, x, yi);
+    hitbox_note_tested(g, x, yi); /* hit box display (key H): only reads the box that was just computed */
+}
+
 static int entity_in_hit_list(Game *g, int x) /* B6 $9617: carry = the target is in the table */
 {
     for (uint8_t y = 0;; y = (uint8_t)(y + 2)) {
@@ -61,7 +67,7 @@ static int entity_in_hit_list(Game *g, int x) /* B6 $9617: carry = the target is
     }
 }
 
-static int hitboxes_overlap(Game *g, int x, int y) /* B6 $9AD3 */
+static int hitboxes_overlap_raw(Game *g, int x, int y) /* B6 $9AD3 */
 {
     if (M(EntType + x) == 0) {
         return 0;
@@ -81,7 +87,14 @@ static int hitboxes_overlap(Game *g, int x, int y) /* B6 $9AD3 */
     return !(M(Tmp13) < M(TmpA));
 }
 
+static int hitboxes_overlap(Game *g, int x, int y) {
+    int touching = hitboxes_overlap_raw(g, x, y);
+    hitbox_note_pair(g, x, y, touching); /* hit box display (key H) */
+    return touching;
+}
+
 void check_entity_collisions(Game *g) {
+    hitbox_begin(g); /* hit box display (key H): reads the entities before anything is tested */
     if (M(WaveState) != 3) {
         M(0xD2) = 0;
     }

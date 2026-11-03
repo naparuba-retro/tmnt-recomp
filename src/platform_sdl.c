@@ -112,6 +112,9 @@ void platform_poll(PlatformEvents *ev) {
                 case SDLK_i:
                     pending.invincible = 1;
                     break;
+                case SDLK_h:
+                    pending.hitbox = 1;
+                    break;
                 case SDLK_F5:
                     pending.restart = 1;
                     break;

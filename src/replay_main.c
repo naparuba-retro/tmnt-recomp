@@ -20,6 +20,7 @@
 #include <string.h>
 #include <errno.h>
 #include "game.h"
+#include "hitbox_view.h"
 #include "enemy.h"
 #include "nmi.h"
 #include "sound.h"
@@ -510,8 +511,14 @@ int main(int argc, char **argv) {
         return 0;
     }
 #endif
+    if (getenv("TMNT_HITBOX")) { /* fills the hit box journal (tests: the game must not change, and the formula must match the game's boxes) */
+        hitbox_set_enabled(1);
+    }
     for (g->frame = 1; g->frame <= r->frames && !g->left_attract; g->frame++) {
         run_frame(r);
+    }
+    if (hitbox_enabled()) {
+        fprintf(stderr, "hitbox: %u boxes read from the game, %u differ from the formula\n", hitbox_checked(), hitbox_mismatches());
     }
     fclose(g->trace);
     return 0;

@@ -1,11 +1,12 @@
 /* Player front-end (the executable `tmnt`): finds the ROM, runs the game at 60 frames per second and relays keys, picture and sound
  * through platform.h (Windows or SDL2). The pace comes from the sound card: 735 samples at 44100 Hz per frame.
  * Keys: arrows = d-pad, Z or W = B, X = A, Enter = Start, Tab or right Shift = Select, M = sound, P = pause, I = invincible,
- * F5 = restart, F9 = rewind, F10 = capture, Esc = quit. */
+ * H = hit boxes, F5 = restart, F9 = rewind, F10 = capture, Esc = quit. */
 #include <stdlib.h>
 #include <string.h>
 #include "game.h"
 #include "help_screen.h"
+#include "hitbox_view.h"
 #include "nmi.h"
 #include "platform.h"
 
@@ -58,6 +59,7 @@ static int snap_restore(Game *g) /* 1st press: the last snapshot; the following 
     g->rom = rom;
     g->trace = tr;
     g->frame = fr;
+    hitbox_clear(); /* the boxes recorded belong to the state that was left */
     snap_idx++;
     return 1;
 }
@@ -67,6 +69,7 @@ static void render(Game *g) {
     for (int i = 0; i < SCREEN_W * SCREEN_H; i++) {
         screen[i] = PAL[idx[i] & 63];
     }
+    hitbox_draw(g, screen); /* key H: drawn over the picture only, the game state is not touched */
 }
 
 static void put16(FILE *f, unsigned v) {
@@ -130,6 +133,42 @@ static FILE *poke_log; /* tmnt_pokes.txt: "frame address value", format of build
 static int start_level2, level2_done;
 static int start_level_n = 1; /* --level2: 1; --level3: 2; --level4: 3 (value of LevelNumber and AreaNumber of the street) */
 static uint8_t input_mask;
+
+/* --input file: plays the pad from a file of ranges "first last mask" (the format of tmnt_input.txt), frames counted from the launch, instead of the
+ * keyboard. Handy to watch a recorded game, with the hit boxes for instance. */
+typedef struct {
+    uint32_t first, last;
+    uint8_t mask;
+} PadRange;
+static PadRange *pad_script;
+static int pad_script_n;
+
+static void load_pad_script(const char *fn) {
+    FILE *f = fopen(fn, "r");
+    if (!f) {
+        fprintf(stderr, "cannot open %s\n", fn);
+        exit(1);
+    }
+    unsigned a, b, m;
+    while (fscanf(f, "%u %u %u", &a, &b, &m) == 3) {
+        PadRange *p = realloc(pad_script, (size_t)(pad_script_n + 1) * sizeof *p);
+        if (!p) {
+            exit(1);
+        }
+        pad_script = p;
+        pad_script[pad_script_n++] = (PadRange){a, b, (uint8_t)m};
+    }
+    fclose(f);
+}
+
+static uint8_t pad_script_at(uint32_t frame) {
+    for (int i = 0; i < pad_script_n; i++) {
+        if (frame >= pad_script[i].first && frame <= pad_script[i].last) {
+            return pad_script[i].mask;
+        }
+    }
+    return 0;
+}
 static uint32_t input_start;
 
 static void record_input(Game *g) {
@@ -155,6 +194,7 @@ static void reset_game(Game *g) {
     g->rom = r;
     g->trace = tr;
     game_init(g);
+    hitbox_clear();
 }
 
 /* windowless test mode: tmnt --dump N output  -> output.bmp (last frame) and output.wav (N frames) */
@@ -181,6 +221,7 @@ static int dump_mode(Game *g, int frames, const char *base) {
     put32(w, bytes);
     for (int f = 1; f <= frames; f++) {
         g->frame = (uint32_t)f;
+        g->pad = pad_script_at((uint32_t)f - 1); /* 0 without --input */
         nmi_frame(g);
         apu_mix(g, pcm, SAMPLES_PER_FRAME);
         for (int i = 0; i < SAMPLES_PER_FRAME; i++) {
@@ -222,7 +263,8 @@ static Rom *find_rom_in(const char *dir) {
 static Game *load_game(int argc, char **argv) {
     const char *rom = NULL;
     for (int i = 1; i < argc && !rom; i++) {
-        if (strncmp(argv[i], "--", 2) && !(i >= 2 && !strcmp(argv[i - 1], "--dump")) && !(i >= 3 && !strcmp(argv[i - 2], "--dump"))) {
+        if (strncmp(argv[i], "--", 2) && !(i >= 2 && !strcmp(argv[i - 1], "--dump")) && !(i >= 3 && !strcmp(argv[i - 2], "--dump")) &&
+            !(i >= 2 && !strcmp(argv[i - 1], "--input"))) {
             rom = argv[i];
         }
     }
@@ -282,6 +324,12 @@ static void parse_options(int argc, char **argv) {
         }
         if (!strcmp(argv[i], "--invincible")) {
             invincible = 1;
+        }
+        if (!strcmp(argv[i], "--hitbox")) {
+            hitbox_set_enabled(1);
+        }
+        if (!strcmp(argv[i], "--input") && i + 1 < argc) {
+            load_pad_script(argv[i + 1]);
         }
     }
 }
@@ -359,7 +407,7 @@ static void run_game_frame(Game *g, int audio) {
     if (g->ram[GameMode] == 4 && g->frame % SNAP_EVERY == SNAP_EVERY - 1) {
         snap_save(g); /* end of the 1st frame of the series: stable state between two frames */
     }
-    g->pad = platform_pad();
+    g->pad = pad_script_n ? pad_script_at(g->frame) : platform_pad();
     g->frame++;
     record_input(g);
     rng_idle(g);
@@ -417,6 +465,9 @@ int main(int argc, char **argv) {
         }
         if (ev.pause) {
             paused ^= 1;
+        }
+        if (ev.hitbox) {
+            hitbox_set_enabled(!hitbox_enabled());
         }
         if (ev.invincible) {
             invincible ^= 1;

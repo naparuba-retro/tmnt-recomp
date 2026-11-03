@@ -21,6 +21,7 @@ typedef struct {
     int mute;       /* M */
     int pause;      /* P */
     int invincible; /* I */
+    int hitbox;     /* H */
     int restart;    /* F5 */
     int rewind;     /* F9 */
     int capture;    /* F10 */

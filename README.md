@@ -70,11 +70,20 @@ tells you where to put the file. The ROM can also be given as an argument: `tmnt
 | M / P | sound off / pause |
 | F5 / F9 / F10 | restart / rewind (a snapshot every 10 s) / debug capture |
 | I | invincibility cheat |
+| H | show / hide the hit boxes (see below) |
 | Esc | quit |
 
 The first game controller found works too: d-pad or left stick, A = jump, X or B = attack, Start, Back = Select, left trigger = rewind.
 
-Options: `--level2` ... `--level6` start directly in a level, `--invincible`, `--dump N name` (windowless: writes `name.bmp` and `name.wav` after N frames).
+Options: `--level2` ... `--level6` start directly in a level, `--invincible`, `--hitbox` (hit boxes shown from the start), `--input file` (plays the pad
+from a file of `first last mask` ranges instead of the keyboard), `--dump N name` (windowless: writes `name.bmp` and `name.wav` after N frames).
+
+### Hit boxes
+
+The H key draws the boxes that the game's collision routine works with, over the picture (nothing in the game changes): green = the turtle's body,
+yellow = its weapon, red = enemies and their shots, grey = an active entity that the game did not test this frame, white (thicker) = a pair that touches,
+magenta = a box that wraps around the edge of the screen (the game compares such boxes in an odd way). The boxes are the ones of the game, read as it
+computes them, and drawn with the sprites they belong to.
 
 ## Steam Deck
 
