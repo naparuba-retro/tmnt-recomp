@@ -18,9 +18,11 @@ for the European and the American releases.
 
 ## Download
 
-Each build of the CI is packaged as `tmnt-windows-x64.zip` (contains `tmnt.exe`) and `tmnt-linux-x86_64.tar.gz` (contains the executable `tmnt`, which needs
-the SDL2 library: `sudo apt-get install libsdl2-2.0-0`). They are in the Actions tab of GitHub (artifacts of a workflow run) and, for tagged versions
-(`v*`), in the Releases page. Unpack, put your ROM in the `rom` folder next to the executable (see below), start it.
+The releases page has, for each version, `tmnt-<version>-windows-x64.zip` (contains `tmnt.exe`) and `tmnt-<version>-linux-x86_64.tar.gz` (contains the
+executable `tmnt`, which needs the SDL2 library: `sudo apt-get install libsdl2-2.0-0`). Unpack, put your ROM in the `rom` folder next to the executable
+(see below), start it. Every other build of the CI (`tmnt-dev-<commit>-...`) is only in the Actions tab, as an artifact of the workflow run.
+
+A release is made by tagging a commit: `git tag v1.0.0 && git push origin v1.0.0`.
 
 ## Build
 

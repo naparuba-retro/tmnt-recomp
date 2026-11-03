@@ -9,8 +9,9 @@ on:
 
 # No ROM is available here (and none must be put here): the jobs build the game, check the formatting and run the tests that need no ROM
 # (tools/smoke_test.sh). The replays against the references (tools/ref_run_check.sh) are run locally.
-# Each build is packaged: tmnt-windows-x64.zip (tmnt.exe) and tmnt-linux-x86_64.tar.gz (tmnt, executable). They are kept as workflow artifacts and,
-# when a tag "v*" is pushed, attached to a GitHub release.
+# Each build is packaged: tmnt-<version>-windows-x64.zip (tmnt.exe) and tmnt-<version>-linux-x86_64.tar.gz (tmnt, executable). They are kept as workflow
+# artifacts and, when a tag "v*" is pushed (git tag v1.0.0 && git push origin v1.0.0), attached to a GitHub release. <version> is the tag without its "v",
+# or "dev-<commit>" for a build that is not a release.
 jobs:
   format:
     runs-on: ubuntu-latest
@@ -33,14 +34,17 @@ jobs:
         run: bash tools/smoke_test.sh build
       - name: Package (tar.gz, tmnt is executable)
         run: |
-          mkdir -p package/tmnt-linux-x86_64
-          cp build/tmnt README.md LICENSE package/tmnt-linux-x86_64/
-          chmod a+x package/tmnt-linux-x86_64/tmnt
-          tar -czf tmnt-linux-x86_64.tar.gz -C package tmnt-linux-x86_64
+          VERSION=dev-${GITHUB_SHA::7}
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then VERSION=${GITHUB_REF_NAME#v}; fi
+          NAME=tmnt-$VERSION-linux-x86_64
+          mkdir -p package/$NAME
+          cp build/tmnt README.md LICENSE package/$NAME/
+          chmod a+x package/$NAME/tmnt
+          tar -czf $NAME.tar.gz -C package $NAME
       - uses: actions/upload-artifact@v7
         with:
           name: tmnt-linux-x86_64
-          path: tmnt-linux-x86_64.tar.gz
+          path: tmnt-*-linux-x86_64.tar.gz
           compression-level: 0
           if-no-files-found: error
 
@@ -57,13 +61,16 @@ jobs:
       - name: Package (zip)
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Path package/tmnt-windows-x64 | Out-Null
-          Copy-Item build/tmnt.exe, README.md, LICENSE package/tmnt-windows-x64/
-          Compress-Archive -Path package/tmnt-windows-x64 -DestinationPath tmnt-windows-x64.zip
+          $version = "dev-" + $env:GITHUB_SHA.Substring(0, 7)
+          if ($env:GITHUB_REF -like "refs/tags/v*") { $version = $env:GITHUB_REF_NAME.Substring(1) }
+          $name = "tmnt-$version-windows-x64"
+          New-Item -ItemType Directory -Path "package/$name" | Out-Null
+          Copy-Item build/tmnt.exe, README.md, LICENSE "package/$name/"
+          Compress-Archive -Path "package/$name" -DestinationPath "$name.zip"
       - uses: actions/upload-artifact@v7
         with:
           name: tmnt-windows-x64
-          path: tmnt-windows-x64.zip
+          path: tmnt-*-windows-x64.zip
           compression-level: 0
           if-no-files-found: error
 
@@ -81,6 +88,6 @@ jobs:
       - uses: softprops/action-gh-release@v3
         with:
           files: |
-            packages/tmnt-windows-x64.zip
-            packages/tmnt-linux-x86_64.tar.gz
+            packages/tmnt-*-windows-x64.zip
+            packages/tmnt-*-linux-x86_64.tar.gz
           generate_release_notes: true
