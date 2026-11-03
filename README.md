@@ -71,6 +71,19 @@ The first game controller found works too: d-pad or left stick, A = jump, X or B
 
 Options: `--level2` ... `--level6` start directly in a level, `--invincible`, `--dump N name` (windowless: writes `name.bmp` and `name.wav` after N frames).
 
+## Steam Deck
+
+The Linux build runs on a Steam Deck (SteamOS already has SDL2, there is nothing to install):
+
+1. In Desktop Mode, download the `linux-x86_64.tar.gz` of the release and unpack it, for instance in `/home/deck/Games/TMNT`.
+2. Put your ROM in the `rom` folder that is next to the `tmnt` executable.
+3. In Steam, "Add a Non-Steam Game" and pick the `tmnt` executable.
+4. Start it from **Game Mode**: the Deck's controls then work as a game controller (d-pad or left stick, A = jump, X or B = attack, Start, View = Select,
+   left trigger = rewind).
+
+For now it works in **Game Mode only**. When it is started from Desktop Mode, Steam's desktop layout turns the controller into a keyboard (A becomes
+Enter, B becomes Escape), so B quits the game instead of attacking. Playing in Desktop Mode with the controller is not supported yet; the keyboard works there.
+
 ## Tests
 
 - `bash tools/smoke_test.sh` : tests that need no ROM (usage, refusal of a wrong ROM, help screen when the ROM is missing). They run in the CI.
