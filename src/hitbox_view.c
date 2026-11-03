@@ -14,17 +14,28 @@
 #define COLOUR_UNTESTED 0x707070 /* active entity that the game did not test (excluded type, invulnerable player...) */
 #define COLOUR_TOUCH 0xFFFFFF    /* box of a pair that touches */
 #define COLOUR_WRAPPED 0xFF00FF  /* the 8-bit box wraps around (left > right or top > bottom): the game compares it in an odd way */
+#define COLOUR_HAZARD 0xFF8000   /* map tile that hurts (seaweed...) */
+#define COLOUR_DEADLY 0xFF0000   /* map tile that kills in the swimming zone (deadly seaweed) */
+#define COLOUR_PROBE 0x00FFFF    /* point of the turtle where the map is read while swimming */
 
 typedef struct {
     uint8_t l, r, t, b;
     uint8_t active, tested, touch;
 } Box;
 
+#define SWIM_PROBES 10
+
 typedef struct {
     uint32_t frame;
     int used;
     Box box[ENTITIES];
+    /* the collision map and the camera, for the hazard tiles (seaweed...), and the points the swimming turtle probes the map at */
+    uint8_t terrain[256];
+    uint8_t cam_x_lo, cam_x_hi, cam_y_lo, cam_y_hi, vertical, swim;
+    uint8_t probe[SWIM_PROBES][2];
 } FrameLog;
+
+static uint8_t terrain_class(const FrameLog *f, uint8_t px, uint8_t py);
 
 static FrameLog ring[LOG_FRAMES];
 static uint8_t tested[ENTITIES], touch[ENTITIES]; /* what the last collision frame did; kept for the frames in between */
@@ -141,6 +152,18 @@ void hitbox_end_frame(Game *g) {
     memset(log, 0, sizeof *log);
     log->used = 1;
     log->frame = g->frame;
+    memcpy(log->terrain, &M(TerrainMap), sizeof log->terrain);
+    log->cam_x_lo = M(CameraXLo);
+    log->cam_x_hi = M(CameraXHi);
+    log->cam_y_lo = M(CameraYLo);
+    log->cam_y_hi = M(CameraYHi);
+    log->vertical = (M(VerticalLevelFlag) & 0x80) != 0;
+    log->swim = M(SwimZoneFlag) != 0;
+    static const uint8_t swim_probe_ids[SWIM_PROBES] = {0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x2C, 0x2D, 0x2E, 0x2F}; /* swim_collisions: B4 $A896 */
+    for (int i = 0; i < SWIM_PROBES; i++) { /* the offsets of the probe points around the turtle: B7 $C83E */
+        log->probe[i][0] = (uint8_t)(M(EntX) + rom_prg(g->rom, 7, (uint16_t)(0xC83E + swim_probe_ids[i] * 2)));
+        log->probe[i][1] = (uint8_t)(M(EntY) + rom_prg(g->rom, 7, (uint16_t)(0xC83F + swim_probe_ids[i] * 2)));
+    }
     for (int x = 0; x < ENTITIES; x++) {
         if (entity_active(g, x)) {
             uint8_t rect[4];
@@ -185,6 +208,56 @@ static void outline(uint32_t *s, int l, int r, int t, int b, uint32_t c) {
     vline(s, r, t, b, c);
 }
 
+/* The class (0-15) of the collision map under the screen point (px, py), as GetTileAt (B7 $C76B) reads it, from a recorded map and camera. */
+static uint8_t terrain_class(const FrameLog *f, uint8_t px, uint8_t py) {
+    if (f->vertical) {
+        unsigned cam = f->cam_x_lo | f->cam_x_hi << 8, xx = px + f->cam_x_lo;
+        uint8_t hi = (uint8_t)(f->cam_x_hi + (xx > 0xFF)), ylo = (uint8_t)(py + f->cam_y_lo);
+        ylo = (uint8_t)((((hi & 1) << 7) | (ylo >> 1)) & 0xF8);
+        uint8_t v = f->terrain[(uint8_t)(((uint8_t)xx >> 5) | ylo)];
+        if (xx & 0x10) {
+            v >>= 4;
+        }
+        v &= 0x0F;
+        return cam < 0x80 ? (v == 4 ? 4 : 0) : v;
+    }
+    unsigned value = ((px + f->cam_x_lo) > 0xFF ? 0x100 : 0) | (uint8_t)(px + f->cam_x_lo); /* 9 bits: carry and byte, rotated left by 4 */
+    unsigned rot = ((value << 4) | (value >> 5)) & 0x1FF;
+    unsigned s1 = py + f->cam_y_lo;
+    uint8_t t1 = (uint8_t)s1, t2 = (uint8_t)(f->cam_y_hi + (s1 > 0xFF)), rows = 0;
+    while (t2 != 0 || t1 >= 0xF0) { /* one screen is 240 lines */
+        t2 = (uint8_t)(t2 - (t1 < 0xF0));
+        t1 = (uint8_t)(t1 - 0xF0);
+        rows++;
+    }
+    t1 = (uint8_t)(((rows & 1) << 7) | (t1 >> 1));
+    uint8_t v = f->terrain[(t1 & 0xF8) | (rot & 7)];
+    return (rot & 0x100 ? v >> 4 : v) & 0x0F;
+}
+
+static void tint(uint32_t *pixel, uint32_t colour, int percent) {
+    uint32_t out = 0;
+    for (int shift = 0; shift <= 16; shift += 8) {
+        uint32_t a = (*pixel >> shift) & 255, b = (colour >> shift) & 255;
+        out |= ((a * (100 - percent) + b * percent) / 100) << shift;
+    }
+    *pixel = out;
+}
+
+/* Class 1 of the map hurts the turtle (seaweed: state 14, -0x10 of health), class F kills it in the swimming zone (deadly seaweed: state 19). */
+static void draw_hazard_tiles(const FrameLog *log, uint32_t *screen) {
+    for (int y = 0; y < SCREEN_H; y++) {
+        for (int x = 0; x < SCREEN_W; x++) {
+            uint8_t c = terrain_class(log, (uint8_t)x, (uint8_t)y);
+            if (c == 1) {
+                tint(&screen[y * SCREEN_W + x], COLOUR_HAZARD, 40);
+            } else if (c == 0x0F && log->swim) {
+                tint(&screen[y * SCREEN_W + x], COLOUR_DEADLY, 50);
+            }
+        }
+    }
+}
+
 void hitbox_draw(Game *g, uint32_t *screen) {
     if (!enabled || g->frame < 2) {
         return;
@@ -192,6 +265,21 @@ void hitbox_draw(Game *g, uint32_t *screen) {
     const FrameLog *log = &ring[(g->frame - 2) % LOG_FRAMES];
     if (!log->used || log->frame != g->frame - 2) {
         return;
+    }
+    draw_hazard_tiles(log, screen);
+    if (log->swim) { /* the points the swimming turtle is tested at: a hazard tile touching one of them hurts it */
+        for (int i = 0; i < SWIM_PROBES; i++) {
+            for (int d = -1; d <= 1; d++) {
+                int x = log->probe[i][0] + d, y = log->probe[i][1];
+                if (y < SCREEN_H) {
+                    screen[y * SCREEN_W + (x & 255)] = COLOUR_PROBE;
+                }
+                y = log->probe[i][1] + d;
+                if (y >= 0 && y < SCREEN_H) {
+                    screen[y * SCREEN_W + log->probe[i][0]] = COLOUR_PROBE;
+                }
+            }
+        }
     }
     for (int x = 0; x < ENTITIES; x++) {
         const Box *bx = &log->box[x];

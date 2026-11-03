@@ -85,6 +85,10 @@ yellow = its weapon, red = enemies and their shots, grey = an active entity that
 magenta = a box that wraps around the edge of the screen (the game compares such boxes in an odd way). The boxes are computed with the game's own formula
 (and checked against the values the game computes each time it tests a collision, which it does every other frame) and drawn with the sprites they belong to.
 
+The seaweed of the dam level is not an entity: it is read from the collision map of the level (one class per 16x16 tile) at a few points around the swimming
+turtle. So the same display also tints the tiles of the map that hurt (orange: seaweed, -1 health block) or, in the swimming zone, kill (red: deadly seaweed),
+and marks the points of the turtle where the map is read (cyan crosses). As the map is made of 16x16 tiles, the tinted area is a little larger than the drawing.
+
 ## Steam Deck
 
 The Linux build runs on a Steam Deck (SteamOS already has SDL2, there is nothing to install):

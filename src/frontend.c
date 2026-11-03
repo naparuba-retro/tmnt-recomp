@@ -197,6 +197,8 @@ static void reset_game(Game *g) {
     hitbox_clear();
 }
 
+static void logic_frame(Game *g, int keyboard);
+
 /* windowless test mode: tmnt --dump N output  -> output.bmp (last frame) and output.wav (N frames) */
 static int dump_mode(Game *g, int frames, const char *base) {
     char name[512];
@@ -219,11 +221,9 @@ static int dump_mode(Game *g, int frames, const char *base) {
     put16(w, 16);
     fwrite("data", 1, 4, w);
     put32(w, bytes);
+    g->frame = 0;
     for (int f = 1; f <= frames; f++) {
-        g->frame = (uint32_t)f;
-        g->pad = pad_script_at((uint32_t)f - 1); /* 0 without --input */
-        nmi_frame(g);
-        hitbox_end_frame(g);
+        logic_frame(g, 0);
         apu_mix(g, pcm, SAMPLES_PER_FRAME);
         for (int i = 0; i < SAMPLES_PER_FRAME; i++) {
             put16(w, (uint16_t)pcm[i]);
@@ -402,13 +402,10 @@ static void invincible_cheat(Game *g) {
     }
 }
 
-/* One game frame: keys, logic, rendering, window refresh. */
-static void run_game_frame(Game *g, int audio) {
-    static int last_title_frame = -1;
-    if (g->ram[GameMode] == 4 && g->frame % SNAP_EVERY == SNAP_EVERY - 1) {
-        snap_save(g); /* end of the 1st frame of the series: stable state between two frames */
-    }
-    g->pad = pad_script_n ? pad_script_at(g->frame) : platform_pad();
+/* The logic of one frame, with the pad from the keyboard (or from --input), as in the game window; without a keyboard (--dump) the pad is only
+ * the --input script. */
+static void logic_frame(Game *g, int keyboard) {
+    g->pad = pad_script_n ? pad_script_at(g->frame) : keyboard ? platform_pad() : 0;
     g->frame++;
     record_input(g);
     rng_idle(g);
@@ -416,6 +413,15 @@ static void run_game_frame(Game *g, int audio) {
     hitbox_end_frame(g);
     apply_start_level(g);
     invincible_cheat(g);
+}
+
+/* One game frame: keys, logic, rendering, window refresh. */
+static void run_game_frame(Game *g, int audio) {
+    static int last_title_frame = -1;
+    if (g->ram[GameMode] == 4 && g->frame % SNAP_EVERY == SNAP_EVERY - 1) {
+        snap_save(g); /* end of the 1st frame of the series: stable state between two frames */
+    }
+    logic_frame(g, 1);
     if (g->left_attract && g->ram[GameMode] == 4) { /* level loaded, but the rest is not ported: the frame is kept */
         frozen = 1;
         apu_write(g, 0x15, 0);
