@@ -40,6 +40,8 @@ jobs:
           mkdir -p package/$NAME
           cp build/tmnt README.md LICENSE package/$NAME/
           chmod a+x package/$NAME/tmnt
+          mkdir package/$NAME/rom
+          echo "Put your Teenage Mutant Ninja Turtles ROM (.nes file, European or American version) in this folder." > package/$NAME/rom/PUT_YOUR_ROM_HERE.txt
           tar -czf $NAME.tar.gz -C package $NAME
       - uses: actions/upload-artifact@v7
         with:
@@ -66,6 +68,8 @@ jobs:
           $name = "tmnt-$version-windows-x64"
           New-Item -ItemType Directory -Path "package/$name" | Out-Null
           Copy-Item build/tmnt.exe, README.md, LICENSE "package/$name/"
+          New-Item -ItemType Directory -Path "package/$name/rom" | Out-Null
+          Set-Content -Path "package/$name/rom/PUT_YOUR_ROM_HERE.txt" -Value "Put your Teenage Mutant Ninja Turtles ROM (.nes file, European or American version) in this folder."
           Compress-Archive -Path "package/$name" -DestinationPath "$name.zip"
       - uses: actions/upload-artifact@v7
         with:
