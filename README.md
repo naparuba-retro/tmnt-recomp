@@ -2,10 +2,11 @@
 
 <h1>tmnt-recomp</h1>
 
-A C port of the NES game **Teenage Mutant Ninja Turtles** (Konami, 1989), written function by function from the original 6502 code. It is not an
-emulator: the game logic is real C (no 6502 interpreter); only the NES hardware (PPU, APU, mapper) is emulated, as much as the game needs.
+A C port of the NES game **Teenage Mutant Ninja Turtles** (Konami, 1989), written function by function from the original 6502 code.
 
 <br clear="left">
+
+It is not an emulator: the game logic is real C (no 6502 interpreter); only the NES hardware (PPU, APU, mapper) is emulated, as much as the game needs.
 
 > **Note on how this was made.** I was heavily helped by Claude (an AI assistant from Anthropic) for the decompilation part: it analyzed the game and
 > wrote the specifications that made a reimplementation possible afterwards. I then did a manual pass to reorganize the whole thing a bit. So this is not
