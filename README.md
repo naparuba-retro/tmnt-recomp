@@ -1,3 +1,5 @@
+<p align="center"><img src="logo.jpg" alt="tmnt-recomp logo" width="128" height="140"></p>
+
 # tmnt-recomp
 
 > **Note on how this was made.** I was heavily helped by Claude (an AI assistant from Anthropic) for the decompilation part: it analyzed the game and
