@@ -5,12 +5,13 @@
 #include "platform.h"
 
 #define LOG_FRAMES 4
-#define ENTITIES 16 /* 0 = player body, 1-4 = weapons, 5-15 = enemies and their shots */
+#define ENTITIES 16     /* 0 = player body, 1-4 = weapons, 5-15 = enemies and their shots */
+#define COLLISION_GAP 2 /* the boxes are shown while the collision routine ran at most this many frames ago (it runs every other frame) */
 
 #define COLOUR_PLAYER 0x00FF00
 #define COLOUR_WEAPON 0xFFFF00
 #define COLOUR_ENEMY 0xFF3030
-#define COLOUR_UNTESTED 0x707070 /* active entity that the game did not test this frame (excluded type, invulnerable player, scene...) */
+#define COLOUR_UNTESTED 0x707070 /* active entity that the game did not test (excluded type, invulnerable player...) */
 #define COLOUR_TOUCH 0xFFFFFF    /* box of a pair that touches */
 #define COLOUR_WRAPPED 0xFF00FF  /* the 8-bit box wraps around (left > right or top > bottom): the game compares it in an odd way */
 
@@ -26,8 +27,9 @@ typedef struct {
 } FrameLog;
 
 static FrameLog ring[LOG_FRAMES];
-static FrameLog *cur;
-static int enabled;
+static uint8_t tested[ENTITIES], touch[ENTITIES]; /* what the last collision frame did; kept for the frames in between */
+static uint32_t last_collision_frame;
+static int have_collision, enabled;
 static unsigned mismatches, checked;
 
 void hitbox_set_enabled(int on) {
@@ -41,7 +43,9 @@ int hitbox_enabled(void) {
 
 void hitbox_clear(void) {
     memset(ring, 0, sizeof ring);
-    cur = NULL;
+    memset(tested, 0, sizeof tested);
+    memset(touch, 0, sizeof touch);
+    have_collision = 0;
 }
 
 unsigned hitbox_mismatches(void) {
@@ -101,26 +105,14 @@ void hitbox_begin(Game *g) {
     if (!enabled) {
         return;
     }
-    cur = &ring[g->frame % LOG_FRAMES];
-    memset(cur, 0, sizeof *cur);
-    cur->used = 1;
-    cur->frame = g->frame;
-    for (int x = 0; x < ENTITIES; x++) {
-        if (entity_active(g, x)) {
-            uint8_t rect[4];
-            entity_rect(g, x, rect);
-            Box *bx = &cur->box[x];
-            bx->l = rect[0];
-            bx->r = rect[1];
-            bx->t = rect[2];
-            bx->b = rect[3];
-            bx->active = 1;
-        }
-    }
+    memset(tested, 0, sizeof tested);
+    memset(touch, 0, sizeof touch);
+    last_collision_frame = g->frame;
+    have_collision = 1;
 }
 
 void hitbox_note_tested(Game *g, int x, int yi) {
-    if (!enabled || !cur) {
+    if (!enabled) {
         return;
     }
     uint8_t rect[4], seen[4] = {M(Tmp8 + yi), M(Tmp9 + yi), M(TmpA + yi), M(TmpB + yi)};
@@ -129,24 +121,40 @@ void hitbox_note_tested(Game *g, int x, int yi) {
     if (memcmp(rect, seen, sizeof rect)) {
         mismatches++;
     }
-    Box *bx = &cur->box[x];
-    if (!bx->tested) { /* an enemy is tested once per weapon: the first test is kept */
-        bx->l = seen[0];
-        bx->r = seen[1];
-        bx->t = seen[2];
-        bx->b = seen[3];
-        bx->active = 1;
-        bx->tested = 1;
-    }
+    tested[x] = 1;
 }
 
 void hitbox_note_pair(Game *g, int x, int y, int touching) {
     (void)g;
-    if (!enabled || !cur || !touching) {
+    if (!enabled || !touching) {
         return;
     }
-    cur->box[x].touch = 1;
-    cur->box[y].touch = 1;
+    touch[x] = 1;
+    touch[y] = 1;
+}
+
+void hitbox_end_frame(Game *g) {
+    if (!enabled || !have_collision || g->frame - last_collision_frame > COLLISION_GAP) {
+        return;
+    }
+    FrameLog *log = &ring[g->frame % LOG_FRAMES];
+    memset(log, 0, sizeof *log);
+    log->used = 1;
+    log->frame = g->frame;
+    for (int x = 0; x < ENTITIES; x++) {
+        if (entity_active(g, x)) {
+            uint8_t rect[4];
+            entity_rect(g, x, rect);
+            Box *bx = &log->box[x];
+            bx->l = rect[0];
+            bx->r = rect[1];
+            bx->t = rect[2];
+            bx->b = rect[3];
+            bx->active = 1;
+            bx->tested = tested[x];
+            bx->touch = touch[x];
+        }
+    }
 }
 
 /* a run of pixels from x0 to x1 included, going forward and wrapping at 256 (a wrapped box is drawn in its two pieces) */

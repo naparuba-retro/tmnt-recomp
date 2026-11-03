@@ -82,8 +82,8 @@ from a file of `first last mask` ranges instead of the keyboard), `--dump N name
 
 The H key draws the boxes that the game's collision routine works with, over the picture (nothing in the game changes): green = the turtle's body,
 yellow = its weapon, red = enemies and their shots, grey = an active entity that the game did not test this frame, white (thicker) = a pair that touches,
-magenta = a box that wraps around the edge of the screen (the game compares such boxes in an odd way). The boxes are the ones of the game, read as it
-computes them, and drawn with the sprites they belong to.
+magenta = a box that wraps around the edge of the screen (the game compares such boxes in an odd way). The boxes are computed with the game's own formula
+(and checked against the values the game computes each time it tests a collision, which it does every other frame) and drawn with the sprites they belong to.
 
 ## Steam Deck
 

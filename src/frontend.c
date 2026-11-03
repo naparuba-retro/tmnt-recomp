@@ -223,6 +223,7 @@ static int dump_mode(Game *g, int frames, const char *base) {
         g->frame = (uint32_t)f;
         g->pad = pad_script_at((uint32_t)f - 1); /* 0 without --input */
         nmi_frame(g);
+        hitbox_end_frame(g);
         apu_mix(g, pcm, SAMPLES_PER_FRAME);
         for (int i = 0; i < SAMPLES_PER_FRAME; i++) {
             put16(w, (uint16_t)pcm[i]);
@@ -412,6 +413,7 @@ static void run_game_frame(Game *g, int audio) {
     record_input(g);
     rng_idle(g);
     nmi_frame(g);
+    hitbox_end_frame(g);
     apply_start_level(g);
     invincible_cheat(g);
     if (g->left_attract && g->ram[GameMode] == 4) { /* level loaded, but the rest is not ported: the frame is kept */
