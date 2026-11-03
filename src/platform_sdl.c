@@ -81,17 +81,27 @@ int platform_audio_open(void) {
 
 static SDL_GameController *get_controller(void);
 
+/* Escape quits, except when it comes with the pad's Start button: on a Steam Deck in desktop mode, Steam Input turns Start into an Escape key press
+ * as well as the controller button. The Escape is held for a short while to see whether the button comes with it (in either order). */
+#define ESCAPE_HOLD_MS 100
+#define START_PAIR_MS 300
+
 void platform_poll(PlatformEvents *ev) {
-    static int l2_was;
+    static int l2_was, escape_waiting, start_seen;
+    static Uint32 escape_tick, start_tick;
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
         if (e.type == SDL_QUIT) {
             pending.quit = 1;
+        } else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_START) {
+            start_seen = 1;
+            start_tick = SDL_GetTicks();
         } else if (e.type == SDL_KEYDOWN && !e.key.repeat) {
             pending.any_key = 1;
             switch (e.key.keysym.sym) {
                 case SDLK_ESCAPE:
-                    pending.quit = 1;
+                    escape_waiting = 1;
+                    escape_tick = SDL_GetTicks();
                     break;
                 case SDLK_m:
                     pending.mute = 1;
@@ -114,6 +124,13 @@ void platform_poll(PlatformEvents *ev) {
                 default:
                     break;
             }
+        }
+    }
+    if (escape_waiting && SDL_GetTicks() - escape_tick >= ESCAPE_HOLD_MS) {
+        escape_waiting = 0;
+        Uint32 apart = start_tick > escape_tick ? start_tick - escape_tick : escape_tick - start_tick;
+        if (!start_seen || apart > START_PAIR_MS) {
+            pending.quit = 1;
         }
     }
     SDL_GameController *c = get_controller();
