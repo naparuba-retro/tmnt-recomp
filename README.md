@@ -28,6 +28,11 @@ for the European and the American releases.
 - Not everything is ported: the paths that none of these runs take still print `TODO ...` lines in the debug log instead of doing anything.
 - Randomness is a model (same law as the console, different sequence): a game does not unfold exactly as the same game on the console.
 
+## TODO
+
+- One of the next steps is a "Definitive Edition" of the port, with the fixes reported by the brilliant Upsilandre on his blog:
+  [Tous les secrets de Teenage Mutant Ninja Turtles](https://upsilandre.over-blog.com/2022/06/tous-les-secrets-de-teenage-mutant-ninja-turtles.html).
+
 ## Download
 
 The releases page has, for each version, `tmnt-<version>-windows-x64.zip` (contains `tmnt.exe`) and `tmnt-<version>-linux-x86_64.tar.gz` (contains the
