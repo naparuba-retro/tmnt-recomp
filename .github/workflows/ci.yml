@@ -1,0 +1,96 @@
+name: build
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+# The ROMs of the game are not in the repository, so the replays against the references cannot run here (see the optional step of the Linux job):
+# the jobs build the game, check the formatting and run the tests that need no ROM (tools/smoke_test.sh).
+# Each build is packaged: tmnt-windows-x64.zip (tmnt.exe) and tmnt-linux-x86_64.tar.gz (tmnt, executable). They are kept as workflow artifacts and,
+# when a tag "v*" is pushed, attached to a GitHub release.
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install clang-format (the version the code is formatted with)
+        run: python3 -m pip install clang-format==19.1.5
+      - name: Check the formatting (bash tools/format_c.sh to fix)
+        run: bash tools/format_c.sh --check
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install the build tools
+        run: sudo apt-get update && sudo apt-get install -y build-essential libsdl2-dev pkg-config xvfb
+      - name: Build (gcc, SDL2)
+        run: python3 build.py
+      - name: Tests that need no ROM
+        run: bash tools/smoke_test.sh build
+      # Optional: with the European ROM stored (base64) in the repository secret TMNT_EU_ROM_B64, the reference game (127 500 frames, committed in
+      # tests/reference_game) is replayed and compared with the original trace. Without the secret this step does nothing.
+      - name: Reference game replay (only if the ROM secret exists)
+        env:
+          ROM_B64: ${{ secrets.TMNT_EU_ROM_B64 }}
+        run: |
+          if [ -z "$ROM_B64" ]; then echo "no ROM secret: skipped"; exit 0; fi
+          mkdir -p rom
+          echo "$ROM_B64" | base64 -d > rom/tmnt_eu.nes
+          EXE=build/tmnt_replay bash tools/ref_run_check.sh
+      - name: Package (tar.gz, tmnt is executable)
+        run: |
+          mkdir -p package/tmnt-linux-x86_64
+          cp build/tmnt README.md LICENSE package/tmnt-linux-x86_64/
+          chmod a+x package/tmnt-linux-x86_64/tmnt
+          tar -czf tmnt-linux-x86_64.tar.gz -C package tmnt-linux-x86_64
+      - uses: actions/upload-artifact@v7
+        with:
+          name: tmnt-linux-x86_64
+          path: tmnt-linux-x86_64.tar.gz
+          compression-level: 0
+          if-no-files-found: error
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build (MSVC)
+        shell: bash
+        run: python build.py
+      - name: Tests that need no ROM
+        shell: bash
+        run: bash tools/smoke_test.sh build
+      - name: Package (zip)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path package/tmnt-windows-x64 | Out-Null
+          Copy-Item build/tmnt.exe, README.md, LICENSE package/tmnt-windows-x64/
+          Compress-Archive -Path package/tmnt-windows-x64 -DestinationPath tmnt-windows-x64.zip
+      - uses: actions/upload-artifact@v7
+        with:
+          name: tmnt-windows-x64
+          path: tmnt-windows-x64.zip
+          compression-level: 0
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [format, linux, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: packages
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            packages/tmnt-windows-x64.zip
+            packages/tmnt-linux-x86_64.tar.gz
+          generate_release_notes: true

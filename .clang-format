@@ -1,0 +1,22 @@
+# Formatting of the C port (src). Apply with: bash tools/format_c.sh   Check only: bash tools/format_c.sh --check
+BasedOnStyle: LLVM
+Language: Cpp
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 160
+BreakBeforeBraces: Attach
+InsertBraces: true
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
+IndentCaseLabels: true
+ReflowComments: false
+SortIncludes: Never
+AlignTrailingComments: true
+PointerAlignment: Right
+SpaceAfterCStyleCast: false
+MaxEmptyLinesToKeep: 1

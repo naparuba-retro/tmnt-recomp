@@ -53,3 +53,14 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+# This project
+build/
+rom/
+*.nes
+tmnt_input*.txt
+tmnt_pokes*.txt
+tmnt_rewind*.txt
+tmnt_todo*.log
+tmnt_capture_*
+__pycache__/
