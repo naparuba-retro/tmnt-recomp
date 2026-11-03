@@ -102,33 +102,43 @@ static void draw_background(Game *g, uint8_t *out, uint8_t *bg_c, int pass_from,
         }
     }
     for (int y = pass_from; y < 240; y++) {
+        uint8_t *bg_row = &bg_c[y * 256], *out_row = &out[y * 256];
+        if (!show_bg) {
+            memset(bg_row, 0, 256);
+            continue;
+        }
+        int sy = row_ty[y] * 8 + row_fy[y], ty = row_ty[y];
+        /* A tile is decoded once for its 8 pixels: the tile in use is the one of (name table, column), which changes every 8 pixels. */
+        int tile_key = -1, pal = 0;
+        uint8_t lo = 0, hi = 0;
         for (int x = 0; x < 256; x++) {
-            uint8_t col = 0, c = 0;
-            if (show_bg && (x >= 8 || (p->mask & 2))) {
-                int sx = line_cx[y] * 8 + line_fx[y] + x, sy = row_ty[y] * 8 + row_fy[y];
+            uint8_t c = 0;
+            if (x >= 8 || (p->mask & 2)) {
+                int sx = line_cx[y] * 8 + line_fx[y] + x;
                 int nt = row_nt[y];
                 if (sx >= 256) {
                     nt ^= 1;
                     sx &= 255;
                 }
-                uint16_t base = (uint16_t)(0x2000 + nt * 0x400);
-                int tx = sx >> 3, ty = row_ty[y];
-                uint8_t tile = *vram_ptr(g, (uint16_t)(base + ty * 32 + tx));
-                uint8_t attr = *vram_ptr(g, (uint16_t)(base + 0x3C0 + (ty >> 2) * 8 + (tx >> 2)));
-                int shift = ((ty & 2) << 1) | (tx & 2);
-                int pal = (attr >> shift) & 3;
-                uint16_t a = (uint16_t)(tile * 16 + (sy & 7));
-                uint8_t lo = chr_byte(g, bg_hi, a), hi = chr_byte(g, bg_hi, (uint16_t)(a + 8));
+                int tx = sx >> 3;
+                if (nt * 32 + tx != tile_key) {
+                    tile_key = nt * 32 + tx;
+                    uint16_t base = (uint16_t)(0x2000 + nt * 0x400);
+                    uint8_t tile = *vram_ptr(g, (uint16_t)(base + ty * 32 + tx));
+                    uint8_t attr = *vram_ptr(g, (uint16_t)(base + 0x3C0 + (ty >> 2) * 8 + (tx >> 2)));
+                    int shift = ((ty & 2) << 1) | (tx & 2);
+                    pal = (attr >> shift) & 3;
+                    uint16_t a = (uint16_t)(tile * 16 + (sy & 7));
+                    lo = chr_byte(g, bg_hi, a);
+                    hi = chr_byte(g, bg_hi, (uint16_t)(a + 8));
+                }
                 int bit = 7 - (sx & 7);
                 c = (uint8_t)(((lo >> bit) & 1) | (((hi >> bit) & 1) << 1));
                 if (c) {
-                    col = p->pal[pal * 4 + c] & 0x3F;
+                    out_row[x] = p->pal[pal * 4 + c] & 0x3F;
                 }
             }
-            bg_c[y * 256 + x] = c;
-            if (c) {
-                out[y * 256 + x] = col;
-            }
+            bg_row[x] = c;
         }
     }
 }
