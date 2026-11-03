@@ -108,37 +108,44 @@ static void draw_background(Game *g, uint8_t *out, uint8_t *bg_c, int pass_from,
             continue;
         }
         int sy = row_ty[y] * 8 + row_fy[y], ty = row_ty[y];
-        /* A tile is decoded once for its 8 pixels: the tile in use is the one of (name table, column), which changes every 8 pixels. */
-        int tile_key = -1, pal = 0;
-        uint8_t lo = 0, hi = 0;
-        for (int x = 0; x < 256; x++) {
-            uint8_t c = 0;
-            if (x >= 8 || (p->mask & 2)) {
-                int sx = line_cx[y] * 8 + line_fx[y] + x;
-                int nt = row_nt[y];
-                if (sx >= 256) {
-                    nt ^= 1;
-                    sx &= 255;
+        /* The line is drawn in runs of pixels that belong to one tile (at most 8): a tile is decoded once for its whole run. */
+        int x = 0;
+        while (x < 256) {
+            int sx = line_cx[y] * 8 + line_fx[y] + x;
+            int nt = row_nt[y];
+            if (sx >= 256) {
+                nt ^= 1;
+                sx &= 255;
+            }
+            int len = 8 - (sx & 7);
+            if (len > 256 - x) {
+                len = 256 - x;
+            }
+            if (x < 8 && !(p->mask & 2)) { /* the 8 leftmost pixels are hidden */
+                if (len > 8 - x) {
+                    len = 8 - x;
                 }
-                int tx = sx >> 3;
-                if (nt * 32 + tx != tile_key) {
-                    tile_key = nt * 32 + tx;
-                    uint16_t base = (uint16_t)(0x2000 + nt * 0x400);
-                    uint8_t tile = *vram_ptr(g, (uint16_t)(base + ty * 32 + tx));
-                    uint8_t attr = *vram_ptr(g, (uint16_t)(base + 0x3C0 + (ty >> 2) * 8 + (tx >> 2)));
-                    int shift = ((ty & 2) << 1) | (tx & 2);
-                    pal = (attr >> shift) & 3;
-                    uint16_t a = (uint16_t)(tile * 16 + (sy & 7));
-                    lo = chr_byte(g, bg_hi, a);
-                    hi = chr_byte(g, bg_hi, (uint16_t)(a + 8));
-                }
-                int bit = 7 - (sx & 7);
-                c = (uint8_t)(((lo >> bit) & 1) | (((hi >> bit) & 1) << 1));
+                memset(bg_row + x, 0, (size_t)len);
+                x += len;
+                continue;
+            }
+            int tx = sx >> 3;
+            uint16_t base = (uint16_t)(0x2000 + nt * 0x400);
+            uint8_t tile = *vram_ptr(g, (uint16_t)(base + ty * 32 + tx));
+            uint8_t attr = *vram_ptr(g, (uint16_t)(base + 0x3C0 + (ty >> 2) * 8 + (tx >> 2)));
+            int shift = ((ty & 2) << 1) | (tx & 2);
+            const uint8_t *colours = &p->pal[((attr >> shift) & 3) * 4];
+            uint16_t a = (uint16_t)(tile * 16 + (sy & 7));
+            uint8_t lo = chr_byte(g, bg_hi, a), hi = chr_byte(g, bg_hi, (uint16_t)(a + 8));
+            for (int k = 0; k < len; k++) {
+                int bit = 7 - ((sx & 7) + k);
+                uint8_t c = (uint8_t)(((lo >> bit) & 1) | (((hi >> bit) & 1) << 1));
+                bg_row[x + k] = c;
                 if (c) {
-                    out_row[x] = p->pal[pal * 4 + c] & 0x3F;
+                    out_row[x + k] = colours[c] & 0x3F;
                 }
             }
-            bg_row[x] = c;
+            x += len;
         }
     }
 }

@@ -230,6 +230,50 @@ static void apu_cycle(Apu *a) {
     }
 }
 
+/* Runs `cycles` CPU cycles, same result as calling apu_cycle() that many times. Most cycles only count the timers down: those are done in one go,
+ * up to the next cycle where something happens (a frame sequencer step or a timer reaching 0), which apu_cycle() then runs. */
+static void apu_run(Apu *a, int cycles) {
+    while (cycles > 0) {
+        int skip = cycles;
+        int next = a->five_step ? 37281 : 29829; /* the frame sequencer steps at these counts only (equality) */
+        static const int steps[] = {7457, 14913, 22371};
+        for (int i = 0; i < 3; i++) {
+            if (steps[i] > a->fs_cycle && steps[i] < next) {
+                next = steps[i];
+            }
+        }
+        if (next > a->fs_cycle && next - a->fs_cycle - 1 < skip) {
+            skip = next - a->fs_cycle - 1;
+        }
+        if (a->tri_cnt < skip) {
+            skip = a->tri_cnt;
+        }
+        if (a->noise_cnt < skip) {
+            skip = a->noise_cnt;
+        }
+        int pulse_min = a->pulse_cnt[0] < a->pulse_cnt[1] ? a->pulse_cnt[0] : a->pulse_cnt[1];
+        /* a pulse timer counts down every other cycle, starting with the first one when cycle_odd is 0 */
+        if ((a->cycle_odd ? skip / 2 : (skip + 1) / 2) > pulse_min) {
+            skip = a->cycle_odd ? 2 * pulse_min + 1 : 2 * pulse_min;
+        }
+        if (skip > 0) {
+            int pulse_steps = a->cycle_odd ? skip / 2 : (skip + 1) / 2;
+            a->fs_cycle += skip;
+            a->tri_cnt = (uint16_t)(a->tri_cnt - skip);
+            a->noise_cnt = (uint16_t)(a->noise_cnt - skip);
+            a->pulse_cnt[0] = (uint16_t)(a->pulse_cnt[0] - pulse_steps);
+            a->pulse_cnt[1] = (uint16_t)(a->pulse_cnt[1] - pulse_steps);
+            a->cycle_odd ^= (uint8_t)(skip & 1);
+            cycles -= skip;
+            if (!cycles) {
+                break;
+            }
+        }
+        apu_cycle(a);
+        cycles--;
+    }
+}
+
 static int pulse_out(Apu *a, int i) {
     if (!a->len[i] || a->pulse_timer[i] < 8 || sweep_target(a, i) > 0x7FF) {
         return 0;
@@ -248,10 +292,9 @@ void apu_mix(Game *g, int16_t *out, int n) {
     }
     for (int s = 0; s < n; s++) {
         a->cyc_acc += 1789773.0 / 44100.0;
-        while (a->cyc_acc >= 1.0) {
-            a->cyc_acc -= 1.0;
-            apu_cycle(a);
-        }
+        int cycles = (int)a->cyc_acc; /* same as subtracting 1.0 while it is >= 1.0: those subtractions are exact */
+        a->cyc_acc -= cycles;
+        apu_run(a, cycles);
         int p = pulse_out(a, 0) + pulse_out(a, 1);
         int tri = (a->len[2] && a->tri_lin) ? (a->tri_phase < 16 ? 15 - a->tri_phase : a->tri_phase - 16) : 0;
         int noi = 0;
