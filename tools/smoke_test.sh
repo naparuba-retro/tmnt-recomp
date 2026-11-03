@@ -35,7 +35,7 @@ RUN=""
 if [ "$(uname -s)" = "Linux" ] && [ -z "$DISPLAY" ] && command -v xvfb-run >/dev/null; then RUN="xvfb-run -a"; fi
 if [ "$(uname -s)" != "Linux" ] || [ -n "$DISPLAY" ] || [ -n "$RUN" ]; then
     step "S4. tmnt without ROM: help screen, creates ./rom"
-    (cd "$WORK/game" && SDL_AUDIODRIVER=dummy timeout 6 $RUN ./tmnt$EXT >/dev/null 2>&1)
+    (cd "$WORK/game" && SDL_AUDIODRIVER=dummy timeout 20 $RUN ./tmnt$EXT >/dev/null 2>&1) # long enough for a slow virtual display to start
     rc=$?
     if [ -d "$WORK/game/rom" ] && [ $rc -eq 124 ]; then ok; else ko; echo "   rc=$rc (124 = still waiting for a key, as expected), rom folder: $([ -d "$WORK/game/rom" ] && echo yes || echo no)"; fi
 else
