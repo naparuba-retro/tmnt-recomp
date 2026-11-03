@@ -11,8 +11,11 @@ for the European and the American releases.
 ## Status
 
 - European and American ROMs are both supported (the American code is read through an address translation, see `src/rom.c`).
-- Verified identical to the original: a complete game played from the title screen to the end screen (127 500 frames, European ROM), and a 55 530 frames
-  tool-assisted speedrun (American ROM) compared frame by frame with BizHawk.
+- **Replays the reference TAS 1:1.** The port plays the tool-assisted speedrun
+  [NES Teenage Mutant Ninja Turtles by DreamYao in 15:36.19](https://tasvideos.org/4543M) (TASVideos movie #4543, American ROM, levels 1 to 6) with the
+  inputs recorded by BizHawk: 55 530 logical frames, and the console RAM matches the BizHawk run frame by frame, with no divergence. This comparison is
+  made against memory dumps of BizHawk that are not part of this repository (the TAS itself is not distributed here, only linked).
+- Also verified identical to the original: a complete game played from the title screen to the end screen (127 500 frames, European ROM), see `tests/`.
 - Not everything is ported: the paths that none of these runs take still print `TODO ...` lines in the debug log instead of doing anything.
 - Randomness is a model (same law as the console, different sequence): a game does not unfold exactly as the same game on the console.
 
