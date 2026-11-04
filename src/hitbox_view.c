@@ -34,7 +34,7 @@ typedef struct {
     Box box[ENTITIES];
     /* the collision map and the camera, for the hazard tiles (seaweed...), and the points the swimming turtle probes the map at */
     uint8_t terrain[256];
-    uint8_t cam_x_lo, cam_x_hi, cam_y_lo, cam_y_hi, vertical, swim;
+    uint8_t cam_x_lo, cam_x_hi, cam_y_lo, cam_y_hi, vertical, swim, top_view, van;
     uint8_t nprobes, probe[MAX_PROBES][2];
 } FrameLog;
 
@@ -162,15 +162,29 @@ void hitbox_end_frame(Game *g) {
     log->cam_y_hi = M(CameraYHi);
     log->vertical = (M(VerticalLevelFlag) & 0x80) != 0;
     log->swim = M(SwimZoneFlag) != 0;
-    /* The turtle is tested against the map at points around it (offsets from B7 $C83E), not with a box: the ones of swim_collisions (B4 $A896) in the
-     * swimming zone, those of the walking, jumping and climbing code (side_move.c, ladder.c, pose.c...) elsewhere. */
+    log->top_view = !M(SideViewFlag); /* the streets; the buildings and the dam are seen from the side */
+    log->van = M(InVanFlag) != 0;
+    /* The turtle is tested against the map at points around it, not with a box. Side view and swimming: points of the table B7 $C83E, the ones of
+     * swim_collisions (B4 $A896) in the swimming zone, those of the walking, jumping and climbing code (side_move.c, ladder.c, pose.c...) elsewhere.
+     * Top view (overhead.c, B6 $A8D0): one point in the direction of the walk, two on each side for the van. */
     static const uint8_t swim_probe_ids[] = {0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x2C, 0x2D, 0x2E, 0x2F};
     static const uint8_t walk_probe_ids[] = {0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x11, 0x12, 0x13};
-    const uint8_t *ids = log->swim ? swim_probe_ids : walk_probe_ids;
-    log->nprobes = (uint8_t)(log->swim ? sizeof swim_probe_ids : sizeof walk_probe_ids);
-    for (int i = 0; i < log->nprobes; i++) {
-        log->probe[i][0] = (uint8_t)(M(EntX) + rom_prg(g->rom, 7, (uint16_t)(0xC83E + ids[i] * 2)));
-        log->probe[i][1] = (uint8_t)(M(EntY) + rom_prg(g->rom, 7, (uint16_t)(0xC83F + ids[i] * 2)));
+    static const int8_t top_probes[][2] = {{7, 3}, {-7, 3}, {0, -3}, {0, 6}};
+    static const int8_t van_probes[][2] = {{16, -9}, {16, 9}, {-16, -9}, {-16, 9}, {-9, -16}, {9, -16}, {-9, 14}, {9, 14}};
+    if (log->top_view) {
+        log->nprobes = (uint8_t)(log->van ? sizeof van_probes / sizeof *van_probes : sizeof top_probes / sizeof *top_probes);
+        for (int i = 0; i < log->nprobes; i++) {
+            const int8_t *d = log->van ? van_probes[i] : top_probes[i];
+            log->probe[i][0] = (uint8_t)(M(EntX) + d[0]);
+            log->probe[i][1] = (uint8_t)(M(EntY) + d[1]);
+        }
+    } else {
+        const uint8_t *ids = log->swim ? swim_probe_ids : walk_probe_ids;
+        log->nprobes = (uint8_t)(log->swim ? sizeof swim_probe_ids : sizeof walk_probe_ids);
+        for (int i = 0; i < log->nprobes; i++) {
+            log->probe[i][0] = (uint8_t)(M(EntX) + rom_prg(g->rom, 7, (uint16_t)(0xC83E + ids[i] * 2)));
+            log->probe[i][1] = (uint8_t)(M(EntY) + rom_prg(g->rom, 7, (uint16_t)(0xC83F + ids[i] * 2)));
+        }
     }
     for (int x = 0; x < ENTITIES; x++) {
         if (entity_active(g, x)) {
@@ -252,10 +266,13 @@ static void tint(uint32_t *pixel, uint32_t colour, int percent) {
     *pixel = out;
 }
 
-/* Class 1 of the map hurts the turtle (seaweed: state 14, -0x10 of health), class F kills it in the swimming zone (deadly seaweed: state 19). */
-/* What a class of the map is for the scenery drawing: 1 = solid (floor, wall, platform, block), 2 = ladder, 3 = conveyor belt. */
-static int scenery_kind(uint8_t c) {
-    return c == 4 ? 1 : (c == 9 || c == 0x0A) ? 2 : (c == 0x0C || c == 0x0D) ? 3 : 0;
+/* What a class of the map is for the scenery drawing: 1 = solid, 2 = a lighter outline (ladder, conveyor belt, door). In the side view the solid
+ * class is 4; in the top view the classes that block the walk are 4 and $0C ($06 only in the van, B7 $F20E) and 2 is a door. */
+static int scenery_kind(const FrameLog *log, uint8_t c) {
+    if (log->top_view) {
+        return (c == 4 || c == 0x0C || (c == 6 && log->van)) ? 1 : c == 2 ? 2 : 0;
+    }
+    return c == 4 ? 1 : (c == 9 || c == 0x0A || c == 0x0C || c == 0x0D) ? 2 : 0;
 }
 
 /* The map under every point of the playfield (below it is the status bar, which does not read the map the same way). */
@@ -275,13 +292,13 @@ static void draw_terrain(const FrameLog *log, uint32_t *screen) {
             } else if (c == 0x0F && log->swim) { /* class F kills it in the swimming zone (deadly seaweed: state 19) */
                 tint(pixel, COLOUR_DEADLY, 50);
             }
-            int kind = scenery_kind(c);
+            int kind = scenery_kind(log, c);
             if (!kind) {
                 continue;
             }
             /* the scenery is drawn as the outline of its regions: a point that has a neighbour of another kind */
-            int edge = (x > 0 && scenery_kind(cls[y][x - 1]) != kind) || (x < SCREEN_W - 1 && scenery_kind(cls[y][x + 1]) != kind) ||
-                       (y > 0 && scenery_kind(cls[y - 1][x]) != kind) || (y < PLAYFIELD_H - 1 && scenery_kind(cls[y + 1][x]) != kind);
+            int edge = (x > 0 && scenery_kind(log, cls[y][x - 1]) != kind) || (x < SCREEN_W - 1 && scenery_kind(log, cls[y][x + 1]) != kind) ||
+                       (y > 0 && scenery_kind(log, cls[y - 1][x]) != kind) || (y < PLAYFIELD_H - 1 && scenery_kind(log, cls[y + 1][x]) != kind);
             if (edge) {
                 *pixel = kind == 1 ? COLOUR_SOLID : COLOUR_CLIMB;
             }
