@@ -367,13 +367,8 @@ static void apply_start_level(Game *g) {
     const struct {
         uint16_t a;
         uint8_t v;
-    } pk[6] = {{0xA7, (uint8_t)(start_level_n >= 2 ? 6 : 0)},
-               {0xBF, (uint8_t)(start_level_n >= 2 ? 20 : 0)},
-               {0x48, (uint8_t)start_level_n},
-               {0x5D, (uint8_t)(start_level_n == 5 ? 0 : start_level_n)},
-               {0x5C, (uint8_t)(start_level_n == 5)},
-               {0x34, 2}};
-    for (int i = start_level_n >= 2 ? 0 : 2; i < 6; i++) {
+    } pk[4] = {{0x48, (uint8_t)start_level_n}, {0x5D, (uint8_t)(start_level_n == 5 ? 0 : start_level_n)}, {0x5C, (uint8_t)(start_level_n == 5)}, {0x34, 2}};
+    for (int i = 0; i < 4; i++) {
         g->ram[pk[i].a] = pk[i].v;
         if (poke_log) {
             fprintf(poke_log, "%u %u %u\n", g->frame, pk[i].a, pk[i].v);
