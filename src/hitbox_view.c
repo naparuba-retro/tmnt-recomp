@@ -26,7 +26,7 @@ typedef struct {
     uint8_t active, tested, touch;
 } Box;
 
-#define SWIM_PROBES 10
+#define MAX_PROBES 15
 
 typedef struct {
     uint32_t frame;
@@ -35,7 +35,7 @@ typedef struct {
     /* the collision map and the camera, for the hazard tiles (seaweed...), and the points the swimming turtle probes the map at */
     uint8_t terrain[256];
     uint8_t cam_x_lo, cam_x_hi, cam_y_lo, cam_y_hi, vertical, swim;
-    uint8_t probe[SWIM_PROBES][2];
+    uint8_t nprobes, probe[MAX_PROBES][2];
 } FrameLog;
 
 static uint8_t terrain_class(const FrameLog *f, uint8_t px, uint8_t py);
@@ -162,10 +162,15 @@ void hitbox_end_frame(Game *g) {
     log->cam_y_hi = M(CameraYHi);
     log->vertical = (M(VerticalLevelFlag) & 0x80) != 0;
     log->swim = M(SwimZoneFlag) != 0;
-    static const uint8_t swim_probe_ids[SWIM_PROBES] = {0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x2C, 0x2D, 0x2E, 0x2F}; /* swim_collisions: B4 $A896 */
-    for (int i = 0; i < SWIM_PROBES; i++) { /* the offsets of the probe points around the turtle: B7 $C83E */
-        log->probe[i][0] = (uint8_t)(M(EntX) + rom_prg(g->rom, 7, (uint16_t)(0xC83E + swim_probe_ids[i] * 2)));
-        log->probe[i][1] = (uint8_t)(M(EntY) + rom_prg(g->rom, 7, (uint16_t)(0xC83F + swim_probe_ids[i] * 2)));
+    /* The turtle is tested against the map at points around it (offsets from B7 $C83E), not with a box: the ones of swim_collisions (B4 $A896) in the
+     * swimming zone, those of the walking, jumping and climbing code (side_move.c, ladder.c, pose.c...) elsewhere. */
+    static const uint8_t swim_probe_ids[] = {0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x2C, 0x2D, 0x2E, 0x2F};
+    static const uint8_t walk_probe_ids[] = {0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x11, 0x12, 0x13};
+    const uint8_t *ids = log->swim ? swim_probe_ids : walk_probe_ids;
+    log->nprobes = (uint8_t)(log->swim ? sizeof swim_probe_ids : sizeof walk_probe_ids);
+    for (int i = 0; i < log->nprobes; i++) {
+        log->probe[i][0] = (uint8_t)(M(EntX) + rom_prg(g->rom, 7, (uint16_t)(0xC83E + ids[i] * 2)));
+        log->probe[i][1] = (uint8_t)(M(EntY) + rom_prg(g->rom, 7, (uint16_t)(0xC83F + ids[i] * 2)));
     }
     for (int x = 0; x < ENTITIES; x++) {
         if (entity_active(g, x)) {
@@ -293,8 +298,8 @@ void hitbox_draw(Game *g, uint32_t *screen) {
         return;
     }
     draw_terrain(log, screen);
-    if (log->swim) { /* the points the swimming turtle is tested at: a hazard tile touching one of them hurts it */
-        for (int i = 0; i < SWIM_PROBES; i++) {
+    {
+        for (int i = 0; i < log->nprobes; i++) { /* the points of the turtle where the map is read: a hazard or solid tile under one of them counts */
             for (int d = -1; d <= 1; d++) {
                 int x = log->probe[i][0] + d, y = log->probe[i][1];
                 if (y < SCREEN_H) {
