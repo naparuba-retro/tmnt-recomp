@@ -17,6 +17,9 @@
 #define COLOUR_HAZARD 0xFF8000   /* map tile that hurts (seaweed...) */
 #define COLOUR_DEADLY 0xFF0000   /* map tile that kills in the swimming zone (deadly seaweed) */
 #define COLOUR_PROBE 0x00FFFF    /* point of the turtle where the map is read while swimming */
+#define COLOUR_SOLID 0x909090    /* outline of the solid scenery: floors, walls, platforms (sober grey) */
+#define COLOUR_CLIMB 0xC0C0C0    /* outline of ladders and conveyor belts (a lighter grey) */
+#define PLAYFIELD_H 200          /* lines of the picture above the status bar */
 
 typedef struct {
     uint8_t l, r, t, b;
@@ -245,14 +248,37 @@ static void tint(uint32_t *pixel, uint32_t colour, int percent) {
 }
 
 /* Class 1 of the map hurts the turtle (seaweed: state 14, -0x10 of health), class F kills it in the swimming zone (deadly seaweed: state 19). */
-static void draw_hazard_tiles(const FrameLog *log, uint32_t *screen) {
-    for (int y = 0; y < SCREEN_H; y++) {
+/* What a class of the map is for the scenery drawing: 1 = solid (floor, wall, platform, block), 2 = ladder, 3 = conveyor belt. */
+static int scenery_kind(uint8_t c) {
+    return c == 4 ? 1 : (c == 9 || c == 0x0A) ? 2 : (c == 0x0C || c == 0x0D) ? 3 : 0;
+}
+
+/* The map under every point of the playfield (below it is the status bar, which does not read the map the same way). */
+static void draw_terrain(const FrameLog *log, uint32_t *screen) {
+    static uint8_t cls[PLAYFIELD_H][SCREEN_W];
+    for (int y = 0; y < PLAYFIELD_H; y++) {
         for (int x = 0; x < SCREEN_W; x++) {
-            uint8_t c = terrain_class(log, (uint8_t)x, (uint8_t)y);
-            if (c == 1) {
-                tint(&screen[y * SCREEN_W + x], COLOUR_HAZARD, 40);
-            } else if (c == 0x0F && log->swim) {
-                tint(&screen[y * SCREEN_W + x], COLOUR_DEADLY, 50);
+            cls[y][x] = terrain_class(log, (uint8_t)x, (uint8_t)y);
+        }
+    }
+    for (int y = 0; y < PLAYFIELD_H; y++) {
+        for (int x = 0; x < SCREEN_W; x++) {
+            uint8_t c = cls[y][x];
+            uint32_t *pixel = &screen[y * SCREEN_W + x];
+            if (c == 1) { /* class 1 hurts the turtle (seaweed: state 14, -0x10 of health) */
+                tint(pixel, COLOUR_HAZARD, 40);
+            } else if (c == 0x0F && log->swim) { /* class F kills it in the swimming zone (deadly seaweed: state 19) */
+                tint(pixel, COLOUR_DEADLY, 50);
+            }
+            int kind = scenery_kind(c);
+            if (!kind) {
+                continue;
+            }
+            /* the scenery is drawn as the outline of its regions: a point that has a neighbour of another kind */
+            int edge = (x > 0 && scenery_kind(cls[y][x - 1]) != kind) || (x < SCREEN_W - 1 && scenery_kind(cls[y][x + 1]) != kind) ||
+                       (y > 0 && scenery_kind(cls[y - 1][x]) != kind) || (y < PLAYFIELD_H - 1 && scenery_kind(cls[y + 1][x]) != kind);
+            if (edge) {
+                *pixel = kind == 1 ? COLOUR_SOLID : COLOUR_CLIMB;
             }
         }
     }
@@ -266,7 +292,7 @@ void hitbox_draw(Game *g, uint32_t *screen) {
     if (!log->used || log->frame != g->frame - 2) {
         return;
     }
-    draw_hazard_tiles(log, screen);
+    draw_terrain(log, screen);
     if (log->swim) { /* the points the swimming turtle is tested at: a hazard tile touching one of them hurts it */
         for (int i = 0; i < SWIM_PROBES; i++) {
             for (int d = -1; d <= 1; d++) {

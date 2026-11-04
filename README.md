@@ -88,6 +88,8 @@ magenta = a box that wraps around the edge of the screen (the game compares such
 The seaweed of the dam level is not an entity: it is read from the collision map of the level (one class per 16x16 tile) at a few points around the swimming
 turtle. So the same display also tints the tiles of the map that hurt (orange: seaweed, -1 health block) or, in the swimming zone, kill (red: deadly seaweed),
 and marks the points of the turtle where the map is read (cyan crosses). As the map is made of 16x16 tiles, the tinted area is a little larger than the drawing.
+The same map gives the scenery: the outline of the solid parts (floors, walls, platforms, blocks) is drawn in a sober grey, and in a lighter grey the ladders
+and the conveyor belts. Only the classes of the map whose meaning is known are drawn.
 
 ## Steam Deck
 
