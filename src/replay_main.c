@@ -172,7 +172,7 @@ static int compare_pokes(const void *pa, const void *pb) /* by frame, then by po
 typedef struct Replay {
     Game *g;
     unsigned frames, step, start_at;
-    int pixpipe;                /* PIXPIPE=1 : pictures on stdout, from frame PIXFROM to PIXTO (see tools/video/) */
+    int pixpipe; /* PIXPIPE=1 : pictures on stdout, from frame PIXFROM to PIXTO (see tools/video/) */
     unsigned pix_first, pix_last;
     const char *dir, *ram_frames;
     Triples script;
@@ -364,7 +364,8 @@ static void dump_outputs(Replay *r) {
             fclose(f);
         }
     }
-    if (r->pixpipe && g->frame >= r->pix_first && g->frame <= r->pix_last) { /* PIXPIPE=1 : records on stdout (4 bytes of frame number + 61440 palette indices) */
+    if (r->pixpipe && g->frame >= r->pix_first &&
+        g->frame <= r->pix_last) { /* PIXPIPE=1 : records on stdout (4 bytes of frame number + 61440 palette indices) */
         uint32_t frame = g->frame;
         ppu_render(g, r->picture);
         fwrite(&frame, 4, 1, stdout);
