@@ -48,6 +48,7 @@ typedef struct Game {
     uint8_t chr_bank0, chr_bank1;                 /* MMC1: 4 KB CHR banks ($0000 and $1000) */
     /* observation output */
     FILE *trace;
+    void (*sound_tap)(struct Game *g); /* called after each sound driver update, that is each NMI (NULL : nothing) */
     uint32_t frame;
     int left_attract; /* 1 when the port leaves the title/intro scope (GameMode >= 4) */
 } Game;

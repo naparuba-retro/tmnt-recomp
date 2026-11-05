@@ -15,7 +15,7 @@
  *   pad.txt     "number mask" : controller reads of Mesen ($C4DE) ; replaces script.txt and reproduces lost frames exactly
  *   seedrg.txt  "number value" : $45 seen by the game logic at each call of RunGameMode
  *   rewind.txt  "frame snapshot" : F9 rewinds of a played game (see win_main.c)
- * Environment : PIXPIPE=1 (pictures on stdout, PIXFROM / PIXTO : frame window), TRACE_UNBUF, REWINDMAP, SEEDOUT=<file> (writes the seeds of the port), RAMBIN=1 (one ram.bin file), NTDUMP=1 (name tables). */
+ * Environment : WAVOUT=<file.wav> (audio of the replay, one frame of sound per NMI, 44100 Hz mono), SNDCOUNT=<file> ("logical frame updates so far"), PIXPIPE=1 (pictures on stdout, PIXFROM / PIXTO : frame window), TRACE_UNBUF, REWINDMAP, SEEDOUT=<file> (writes the seeds of the port), RAMBIN=1 (one ram.bin file), NTDUMP=1 (name tables). */
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
@@ -24,6 +24,8 @@
 #include <fcntl.h>
 #endif
 #include "game.h"
+#include "apu.h"
+#include "platform.h"
 #include "hitbox_view.h"
 #include "enemy.h"
 #include "nmi.h"
@@ -398,8 +400,58 @@ static void log_events(Replay *r) {
     }
 }
 
+/* ------------------------------------------------------------------------------------------------ audio (WAVOUT, SNDCOUNT) */
+static FILE *wav_file, *snd_count_file;
+static unsigned snd_updates; /* sound driver updates so far = NMIs = console frames */
+
+static void wav_put32(FILE *f, uint32_t v) {
+    for (int i = 0; i < 4; i++) {
+        fputc((int)((v >> (8 * i)) & 0xFF), f);
+    }
+}
+
+static void wav_header(FILE *f, uint32_t frames) {
+    uint32_t bytes = frames * SAMPLES_PER_FRAME * 2;
+    fwrite("RIFF", 1, 4, f);
+    wav_put32(f, 36 + bytes);
+    fwrite("WAVEfmt ", 1, 8, f);
+    wav_put32(f, 16);
+    wav_put32(f, 1 | (1u << 16)); /* PCM, mono */
+    wav_put32(f, SAMPLE_RATE);
+    wav_put32(f, SAMPLE_RATE * 2);
+    wav_put32(f, 2 | (16u << 16)); /* block align, bits per sample */
+    fwrite("data", 1, 4, f);
+    wav_put32(f, bytes);
+}
+
+static void sound_tap(Game *g) { /* one sound update = one NMI = 1/60.0988 s of audio (the video tools correct the speed) */
+    snd_updates++;
+    if (wav_file) {
+        static int16_t pcm[SAMPLES_PER_FRAME];
+        apu_mix(g, pcm, SAMPLES_PER_FRAME);
+        for (int i = 0; i < SAMPLES_PER_FRAME; i++) {
+            fputc(pcm[i] & 0xFF, wav_file);
+            fputc((pcm[i] >> 8) & 0xFF, wav_file);
+        }
+    }
+}
+
+static void audio_finish(void) {
+    if (wav_file) {
+        fseek(wav_file, 0, SEEK_SET);
+        wav_header(wav_file, snd_updates);
+        fclose(wav_file);
+    }
+    if (snd_count_file) {
+        fclose(snd_count_file);
+    }
+}
+
 static void run_frame(Replay *r) {
     Game *g = r->g;
+    if (snd_count_file) {
+        fprintf(snd_count_file, "%u %u\n", g->frame, snd_updates); /* updates done before this logical frame */
+    }
     apply_rewinds(r);
     apply_inputs(r);
     apply_random_seed(r);
@@ -525,6 +577,20 @@ int main(int argc, char **argv) {
         _setmode(_fileno(stdout), _O_BINARY); /* the pictures are binary */
 #endif
     }
+    if (getenv("WAVOUT") || getenv("SNDCOUNT")) { /* audio of the replay : one frame of sound per NMI */
+        if (getenv("WAVOUT")) {
+            wav_file = fopen(getenv("WAVOUT"), "wb");
+            if (!wav_file) {
+                fprintf(stderr, "tmnt_replay: cannot create %s (%s)\n", getenv("WAVOUT"), strerror(errno));
+                return 1;
+            }
+            wav_header(wav_file, 0); /* sizes patched at the end */
+        }
+        if (getenv("SNDCOUNT")) {
+            snd_count_file = fopen(getenv("SNDCOUNT"), "w");
+        }
+        g->sound_tap = sound_tap;
+    }
     game_init(g);
 #ifdef SNDDIFF
     if (getenv("SNDALL")) {
@@ -542,6 +608,7 @@ int main(int argc, char **argv) {
     if (hitbox_enabled()) {
         fprintf(stderr, "hitbox: %u boxes read from the game, %u differ from the formula\n", hitbox_checked(), hitbox_mismatches());
     }
+    audio_finish();
     fclose(g->trace);
     return 0;
 }

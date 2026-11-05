@@ -96,8 +96,7 @@ void sound_play(Game *g, uint8_t id) {
     M(SoundBusy) <<= 1;
 }
 
-void sound_update(Game *g) /* called once per frame, in the NMI */
-{
+static void sound_update_driver(Game *g) {
     if (M(MapperBusy) & 0x80) {
         return;
     }
@@ -107,4 +106,12 @@ void sound_update(Game *g) /* called once per frame, in the NMI */
     M(SoundBusy) = 0x80;
     engine(g, 2, 0);
     M(SoundBusy) = 0;
+}
+
+void sound_update(Game *g) /* called once per frame, in the NMI */
+{
+    sound_update_driver(g);
+    if (g->sound_tap) {
+        g->sound_tap(g); /* one NMI = one frame of audio (see WAVOUT in replay_main.c) */
+    }
 }
