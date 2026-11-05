@@ -26,7 +26,7 @@ typedef struct {
     uint8_t active, tested, touch;
 } Box;
 
-#define MAX_PROBES 15
+#define MAX_PROBES 19
 
 typedef struct {
     uint32_t frame;
@@ -168,7 +168,7 @@ void hitbox_end_frame(Game *g) {
      * swim_collisions (B4 $A896) in the swimming zone, those of the walking, jumping and climbing code (side_move.c, ladder.c, pose.c...) elsewhere.
      * Top view (overhead.c, B6 $A8D0): one point in the direction of the walk, two on each side for the van. */
     static const uint8_t swim_probe_ids[] = {0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x2C, 0x2D, 0x2E, 0x2F};
-    static const uint8_t walk_probe_ids[] = {0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x11, 0x12, 0x13};
+    static const uint8_t walk_probe_ids[] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x11, 0x12, 0x13, 0x17, 0x18};
     static const int8_t top_probes[][2] = {{7, 3}, {-7, 3}, {0, -3}, {0, 6}};
     static const int8_t van_probes[][2] = {{16, -9}, {16, 9}, {-16, -9}, {-16, 9}, {-9, -16}, {9, -16}, {-9, 14}, {9, 14}};
     if (log->top_view) {
