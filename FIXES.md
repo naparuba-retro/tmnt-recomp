@@ -44,5 +44,40 @@ exactly; with the fix the speed stays 253:
 
 (`vy` = `$04B0`, `vx` = `$04E0`; in this part the screen scrolls, so the movement shows in the camera and not in the turtle's X.)
 
+**Measure.** The jump of the TAS at image 3921 was replayed 11 times with the same inputs, the trajectory moved by -5 to +5 pixels (a poke of the turtle's Y
+at image 3919), so that the head enters the ceiling by 1 to 6 pixels, which is what a jump does. Frames without horizontal speed in the air, and the
+position (camera + X) at image 3950, the turtle starting at 322 and moving left:
+
+| Trajectory shift | Frames stopped, original | Frames stopped, fixed | Position, original | Position, fixed |
+|---|---|---|---|---|
+| -5 | 22 | 0 | 320 | 293 |
+| -3 | 12 | 0 | 306 | 293 |
+| 0 (the TAS) | 4 | 0 | 297 | 293 |
+| +2 | 10 | 0 | 304 | 293 |
+| +5 | 6 | 2 (1) | 300 | 295 |
+| mean of the 11 | 11.3 | 0.4 (1) | 305.6 | 293.4 |
+
+With the fix the turtle goes **12 pixels farther on average** in these 29 frames (28.6 pixels travelled instead of 16.4), up to 27 pixels farther. (1) The 2
+frames of the +4 and +5 lines are the first frames of the jump, before the horizontal speed is set; they are the same for every variant. The script is
+`tools/ceiling_measure.py` of the development repository (it needs the TAS files, which are not in this repository).
+
+**Why not simply move the lateral head probes down by a few pixels?** It was measured too. The ceiling is reached by 1 to 6 pixels, so a probe moved down by
+`s` pixels only helps when the head is in by `s` pixels or less: with `s` = 1, 1 of the 11 trajectories is cured (the one of the TAS, by chance); `s` = 2, 2
+of them; `s` = 4, 4 of them; it takes 6 pixels or more to cure all. But then the probe also decides differently where there is no ceiling, which the fix
+never does. Counting, over the whole TAS (6103 lateral tests in the air, 173 with the head in a ceiling tile) and over the whole European reference game
+(14760 tests, 311 under a ceiling), the frames where the wall decision differs from the original's away from a ceiling:
+
+| Variant | TAS: under a ceiling / elsewhere | Reference game: under a ceiling / elsewhere |
+|---|---|---|
+| the fix | 142 / **0** | 286 / **0** |
+| probe 1 pixel lower | 101 / 6 | 149 / 26 |
+| 2 pixels | 107 / 15 | 217 / 44 |
+| 4 pixels | 118 / 33 | 286 / 102 |
+| 6 pixels | 136 / 47 | 286 / 134 |
+| 8 pixels | 138 / 63 | 286 / 178 |
+
+A moved probe changes walls beside the head with nothing above them (tens to hundreds of frames), and it still misses some ceilings; the fix only touches the
+frames where the head is inside a blocking tile.
+
 **Effect on the TAS.** With the fix on, the replay leaves the original's at image 3921 (US ROM) and image 3402 (European reference game), and the runs differ
 from there on. With the fix off, nothing changes.
