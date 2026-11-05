@@ -15,10 +15,14 @@
  *   pad.txt     "number mask" : controller reads of Mesen ($C4DE) ; replaces script.txt and reproduces lost frames exactly
  *   seedrg.txt  "number value" : $45 seen by the game logic at each call of RunGameMode
  *   rewind.txt  "frame snapshot" : F9 rewinds of a played game (see win_main.c)
- * Environment : TRACE_UNBUF, REWINDMAP, SEEDOUT=<file> (writes the seeds of the port), RAMBIN=1 (one ram.bin file), NTDUMP=1 (name tables). */
+ * Environment : PIXPIPE=1 (pictures on stdout, PIXFROM / PIXTO : frame window), TRACE_UNBUF, REWINDMAP, SEEDOUT=<file> (writes the seeds of the port), RAMBIN=1 (one ram.bin file), NTDUMP=1 (name tables). */
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#ifdef _WIN32
+#include <io.h>
+#include <fcntl.h>
+#endif
 #include "game.h"
 #include "hitbox_view.h"
 #include "enemy.h"
@@ -168,6 +172,8 @@ static int compare_pokes(const void *pa, const void *pb) /* by frame, then by po
 typedef struct Replay {
     Game *g;
     unsigned frames, step, start_at;
+    int pixpipe;                /* PIXPIPE=1 : pictures on stdout, from frame PIXFROM to PIXTO (see tools/video/) */
+    unsigned pix_first, pix_last;
     const char *dir, *ram_frames;
     Triples script;
     Poke *pokes;
@@ -358,6 +364,12 @@ static void dump_outputs(Replay *r) {
             fclose(f);
         }
     }
+    if (r->pixpipe && g->frame >= r->pix_first && g->frame <= r->pix_last) { /* PIXPIPE=1 : records on stdout (4 bytes of frame number + 61440 palette indices) */
+        uint32_t frame = g->frame;
+        ppu_render(g, r->picture);
+        fwrite(&frame, 4, 1, stdout);
+        fwrite(r->picture, 1, sizeof r->picture, stdout);
+    }
     if (dir && r->step && g->frame % r->step == 0) {
         ppu_render(g, r->picture);
         FILE *f = create_output(dir, "%s/p%05u.pix", g->frame);
@@ -503,6 +515,15 @@ int main(int argc, char **argv) {
     r->seed_out = getenv("SEEDOUT") ? fopen(getenv("SEEDOUT"), "w") : NULL;
     r->last_mode = r->last_scene = -1;
 
+    if (getenv("PIXPIPE")) {
+        const char *from = getenv("PIXFROM"), *to = getenv("PIXTO");
+        r->pixpipe = 1;
+        r->pix_first = from ? (unsigned)strtoul(from, NULL, 10) : 1;
+        r->pix_last = to ? (unsigned)strtoul(to, NULL, 10) : 0xFFFFFFFFu;
+#ifdef _WIN32
+        _setmode(_fileno(stdout), _O_BINARY); /* the pictures are binary */
+#endif
+    }
     game_init(g);
 #ifdef SNDDIFF
     if (getenv("SNDALL")) {
