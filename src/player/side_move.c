@@ -44,7 +44,7 @@ static int attack_allowed(Game *g) /* B4 $9F22: carry = can attack */
     return 1;
 }
 
-static int air_attack(Game *g) /* B4 $9EEE: attack during a jump; gives back the X register on return (1: the weapon, measured with BizHawk) */
+static int air_attack(Game *g) /* B4 $9EEE: attack during a jump; gives back the X register on return (1 after a melee attack: the weapon, measured with BizHawk ; the turtle number after a throw) */
 {
     M(0xD4) = 0;
     if (M(SubWeaponSelected) && !M(SubWeaponType0 + M(CurrentTurtle))) {
@@ -53,8 +53,9 @@ static int air_attack(Game *g) /* B4 $9EEE: attack during a jump; gives back the
     if (M(SubWeaponSelected)) {
         subweapon_sound(g);
         set_animation(g, 0, 0x86);
+        int thrown = free_projectile_slot(g) >= 0;
         subweapon_throw(g);
-        return 0;
+        return thrown ? M(CurrentTurtle) : 0; /* $E095: ldx $67 after a throw ; the shuriken of slot X then loses its speed at $A004 (seen with turtle 3 on the last boss) */
     }
     attack_sound(g);
     set_animation(g, 0, R4(0x9F50 + (uint8_t)((M(JoyHeld1) & 0x0C) + M(CurrentTurtle))));

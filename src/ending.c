@@ -21,7 +21,7 @@ static int copy_block(Game *g, uint8_t a) /* B4 $BEA7: copies a block of the $BE
     if (M(SceneDelay)) {
         return 0;
     }
-    uint16_t p = (uint16_t)(R4(0xBED5 + y) | R4(0xBED6 + y) << 8);
+    uint16_t p = rom_word(g->rom, 4, (uint16_t)(0xBED5 + y)); /* pointer read in the ROM : US address converted back to EU */
     if (M(PpuBufferIndex) >= 0x30) {
         return 0;
     }
@@ -38,7 +38,7 @@ static int script_step(Game *g, uint8_t a) /* B4 $BCAC: list of texts and blocks
     uint8_t y = (uint8_t)(a << 1);
     M(SceneDelay) = 0;
     if (!M(SceneFrameCounter)) {
-        uint16_t list = (uint16_t)(R4(0xBD03 + y) | R4(0xBD04 + y) << 8);
+        uint16_t list = rom_word(g->rom, 4, (uint16_t)(0xBD03 + y));
         uint8_t v = R4(list + M(SceneListIndex));
         if (v == 0xFF) {
             M(SceneListIndex) = 0;
@@ -48,10 +48,10 @@ static int script_step(Game *g, uint8_t a) /* B4 $BCAC: list of texts and blocks
             int done;
             if (v & 0x80) { /* $BD1B: fill block */
                 uint8_t k = (uint8_t)(v << 1);
-                done = ppu_fill_script(g, (uint16_t)(R4(0xBD2A + k) | R4(0xBD2B + k) << 8));
+                done = ppu_fill_script(g, rom_word(g->rom, 4, (uint16_t)(0xBD2A + k)));
             } else { /* $BD42: text */
                 uint8_t k = (uint8_t)(v << 1);
-                done = ppu_text_script(g, (uint16_t)(R4(0xBD51 + k) | R4(0xBD52 + k) << 8));
+                done = ppu_text_script(g, rom_word(g->rom, 4, (uint16_t)(0xBD51 + k)));
             }
             if (done) {
                 M(SceneListIndex)++;
