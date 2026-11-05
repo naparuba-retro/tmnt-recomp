@@ -3,6 +3,7 @@
 #include "game.h"
 #include "hitbox_view.h"
 #include "platform.h"
+#include "player/tiles.h"
 
 #define LOG_FRAMES 4
 #define ENTITIES 16     /* 0 = player body, 1-4 = weapons, 5-15 = enemies and their shots */
@@ -232,29 +233,7 @@ static void outline(uint32_t *s, int l, int r, int t, int b, uint32_t c) {
 
 /* The class (0-15) of the collision map under the screen point (px, py), as GetTileAt (B7 $C76B) reads it, from a recorded map and camera. */
 static uint8_t terrain_class(const FrameLog *f, uint8_t px, uint8_t py) {
-    if (f->vertical) {
-        unsigned cam = f->cam_x_lo | f->cam_x_hi << 8, xx = px + f->cam_x_lo;
-        uint8_t hi = (uint8_t)(f->cam_x_hi + (xx > 0xFF)), ylo = (uint8_t)(py + f->cam_y_lo);
-        ylo = (uint8_t)((((hi & 1) << 7) | (ylo >> 1)) & 0xF8);
-        uint8_t v = f->terrain[(uint8_t)(((uint8_t)xx >> 5) | ylo)];
-        if (xx & 0x10) {
-            v >>= 4;
-        }
-        v &= 0x0F;
-        return cam < 0x80 ? (v == 4 ? 4 : 0) : v;
-    }
-    unsigned value = ((px + f->cam_x_lo) > 0xFF ? 0x100 : 0) | (uint8_t)(px + f->cam_x_lo); /* 9 bits: carry and byte, rotated left by 4 */
-    unsigned rot = ((value << 4) | (value >> 5)) & 0x1FF;
-    unsigned s1 = py + f->cam_y_lo;
-    uint8_t t1 = (uint8_t)s1, t2 = (uint8_t)(f->cam_y_hi + (s1 > 0xFF)), rows = 0;
-    while (t2 != 0 || t1 >= 0xF0) { /* one screen is 240 lines */
-        t2 = (uint8_t)(t2 - (t1 < 0xF0));
-        t1 = (uint8_t)(t1 - 0xF0);
-        rows++;
-    }
-    t1 = (uint8_t)(((rows & 1) << 7) | (t1 >> 1));
-    uint8_t v = f->terrain[(t1 & 0xF8) | (rot & 7)];
-    return (rot & 0x100 ? v >> 4 : v) & 0x0F;
+    return terrain_class_at(f->terrain, f->cam_x_lo, f->cam_x_hi, f->cam_y_lo, f->cam_y_hi, f->vertical, px, py);
 }
 
 static void tint(uint32_t *pixel, uint32_t colour, int percent) {

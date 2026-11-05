@@ -70,6 +70,37 @@ uint8_t tile_at(Game *g, uint8_t px, uint8_t py, uint8_t yreg) /* GetTileAt (Y =
     return v & 0x0F;
 }
 
+uint8_t terrain_class_at(const uint8_t *terrain, uint8_t cam_x_lo, uint8_t cam_x_hi, uint8_t cam_y_lo, uint8_t cam_y_hi, int vertical, uint8_t px, uint8_t py) {
+    if (vertical) { /* B7 $C76F-$C7AC */
+        unsigned cam = cam_x_lo | cam_x_hi << 8, xx = px + cam_x_lo;
+        uint8_t hi = (uint8_t)(cam_x_hi + (xx > 0xFF)), ylo = (uint8_t)(py + cam_y_lo);
+        ylo = (uint8_t)((((hi & 1) << 7) | (ylo >> 1)) & 0xF8);
+        uint8_t v = terrain[(uint8_t)(((uint8_t)xx >> 5) | ylo)];
+        if (xx & 0x10) {
+            v >>= 4;
+        }
+        v &= 0x0F;
+        return cam < 0x80 ? (v == 4 ? 4 : 0) : v;
+    }
+    unsigned value = ((px + cam_x_lo) > 0xFF ? 0x100 : 0) | (uint8_t)(px + cam_x_lo); /* 9 bits: carry and byte, rotated left by 4 */
+    unsigned rot = ((value << 4) | (value >> 5)) & 0x1FF;
+    unsigned s1 = py + cam_y_lo;
+    uint8_t t1 = (uint8_t)s1, t2 = (uint8_t)(cam_y_hi + (s1 > 0xFF)), rows = 0;
+    while (t2 != 0 || t1 >= 0xF0) { /* one screen is 240 lines */
+        t2 = (uint8_t)(t2 - (t1 < 0xF0));
+        t1 = (uint8_t)(t1 - 0xF0);
+        rows++;
+    }
+    t1 = (uint8_t)(((rows & 1) << 7) | (t1 >> 1));
+    uint8_t v = terrain[(t1 & 0xF8) | (rot & 7)];
+    return (rot & 0x100 ? v >> 4 : v) & 0x0F;
+}
+
+uint8_t tile_class_near_player(Game *g, uint8_t i) {
+    return terrain_class_at(&M(TerrainMap), M(CameraXLo), M(CameraXHi), M(CameraYLo), M(CameraYHi), (M(VerticalLevelFlag) & 0x80) != 0,
+                            (uint8_t)(OFF_X(i) + M(EntX)), (uint8_t)(OFF_Y(i) + M(EntY)));
+}
+
 uint8_t tile_near_player(Game *g, uint8_t i) /* $C7AF: i = probe point around the player */
 {
     uint8_t px = (uint8_t)(OFF_X(i) + M(EntX)), py = (uint8_t)(OFF_Y(i) + M(EntY));

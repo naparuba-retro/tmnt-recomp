@@ -1,9 +1,10 @@
 /* Player front-end (the executable `tmnt`): finds the ROM, runs the game at 60 frames per second and relays keys, picture and sound
  * through platform.h (Windows or SDL2). The pace comes from the sound card: 735 samples at 44100 Hz per frame.
  * Keys: arrows = d-pad, Z or W = B, X = A, Enter = Start, Tab or right Shift = Select, M = sound, P = pause, I = invincible,
- * H = hit boxes, F5 = restart, F9 = rewind, F10 = capture, Esc = quit. */
+ * H = hit boxes, J = the fixes of FIXES.md, F5 = restart, F9 = rewind, F10 = capture, Esc = quit. */
 #include <stdlib.h>
 #include <string.h>
+#include "fixes.h"
 #include "game.h"
 #include "help_screen.h"
 #include "hitbox_view.h"
@@ -329,6 +330,9 @@ static void parse_options(int argc, char **argv) {
         if (!strcmp(argv[i], "--hitbox")) {
             hitbox_set_enabled(1);
         }
+        if (!strcmp(argv[i], "--fixes")) {
+            fix_set_all(1);
+        }
         if (!strcmp(argv[i], "--input") && i + 1 < argc) {
             load_pad_script(argv[i + 1]);
         }
@@ -431,8 +435,8 @@ static void run_game_frame(Game *g, int audio) {
     if ((int)g->frame / 60 != last_title_frame && g->frame % 60 == 0) {
         char t[128];
         last_title_frame = (int)g->frame / 60;
-        snprintf(t, sizeof t, "TMNT (Europe) - port C | mode %d.%d%s%s", g->ram[GameMode], g->ram[GameSubMode], muted ? " | muted" : "",
-                 audio ? "" : " | no sound card");
+        snprintf(t, sizeof t, "TMNT (Europe) - port C | mode %d.%d%s%s%s", g->ram[GameMode], g->ram[GameSubMode], muted ? " | muted" : "",
+                 audio ? "" : " | no sound card", fix_any_enabled() ? " | FIXES ON (J)" : "");
         platform_set_title(t);
     }
 }
@@ -471,6 +475,11 @@ int main(int argc, char **argv) {
         }
         if (ev.hitbox) {
             hitbox_set_enabled(!hitbox_enabled());
+        }
+        if (ev.fix) { /* the fixes of FIXES.md, all together; the title shows the state at once */
+            fix_toggle_all();
+            platform_set_title(fix_any_enabled() ? "TMNT (Europe) - port C | FIXES ON (J to switch off)"
+                                                 : "TMNT (Europe) - port C | fixes off (J to switch on)");
         }
         if (ev.invincible) {
             invincible ^= 1;

@@ -1,6 +1,7 @@
 /* Side view: walking, jumping, falling. */
 #include "game.h"
 #include "anim.h"
+#include "fixes.h"
 #include "player.h"
 #include "sound.h"
 #include "player/pose.h"
@@ -84,14 +85,37 @@ static int probes_any(Game *g, const uint8_t *ys, int n, uint8_t a) /* carry of 
     return 0;
 }
 
+static const uint8_t right_probes[3] = {0, 0x0A, 0x17}; /* the first one is at head height: (+6, -12) */
+static const uint8_t left_probes[3] = {1, 0x0B, 0x18};  /* the first one is at head height: (-6, -12) */
+
 static int side_blocked_right(Game *g) {
-    static const uint8_t y[3] = {0, 0x0A, 0x17};
-    return probes_any(g, y, 3, 5);
+    return probes_any(g, right_probes, 3, 5);
 } /* $A0EA */
 static int side_blocked_left(Game *g) {
-    static const uint8_t y[3] = {1, 0x0B, 0x18};
-    return probes_any(g, y, 3, 5);
+    return probes_any(g, left_probes, 3, 5);
 } /* $A106 */
+
+/* The tiles that block in table 5 of the probes ($A73D): 04, 0C, 0D. */
+static int blocking_tile(uint8_t c) {
+    return c == 4 || c == 0x0C || c == 0x0D;
+}
+
+/* $A0EA / $A106 in the air, with PIZZA-001: the lateral test has a probe at head height, at the same height as the ceiling probe ($0C: (0, -12)). When
+ * the head is inside a blocking tile, that probe sees the same tile row as the ceiling and takes it for a wall, which stops the horizontal speed of the
+ * turtle for as long as its head is in the row. With the fix, that probe is left out in that case (a wall beside the head, with nothing above it, still
+ * blocks). */
+static int side_blocked_air(Game *g, const uint8_t *ys) {
+    int head_in_ceiling = fix_enabled(FIX_CEILING_SLIDE) && blocking_tile(tile_class_near_player(g, 0x0C));
+    for (int i = 0; i < 3; i++) {
+        if (i == 0 && head_in_ceiling && blocking_tile(tile_class_near_player(g, ys[0]))) {
+            continue;
+        }
+        if (probe_tile(g, ys[i], 5)) {
+            return 1;
+        }
+    }
+    return 0;
+}
 
 static void landing_sound_and_state(Game *g) /* $A18A */
 {
@@ -152,9 +176,9 @@ static int side_horizontal_and_landing(Game *g) /* $A0CE: side collisions then g
 {
     int c;
     if (!(M(EntVelX) & 0x80)) {
-        c = side_blocked_right(g);
+        c = side_blocked_air(g, right_probes);
     } else {
-        c = side_blocked_left(g);
+        c = side_blocked_air(g, left_probes);
     }
     if (c) {
         clear_vel_x(g, 0);

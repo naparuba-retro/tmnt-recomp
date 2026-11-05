@@ -71,12 +71,18 @@ tells you where to put the file. The ROM can also be given as an argument: `tmnt
 | F5 / F9 / F10 | restart / rewind (a snapshot every 10 s) / debug capture |
 | I | invincibility cheat |
 | H | show / hide the hit boxes (see below) |
+| J | switch the fixes on / off (see `FIXES.md`) |
 | Esc | quit |
 
 The first game controller found works too: d-pad or left stick, A = jump, X or B = attack, Start, Back = Select, left trigger = rewind.
 
-Options: `--level2` ... `--level6` start directly in a level, `--invincible`, `--hitbox` (hit boxes shown from the start), `--input file` (plays the pad
+Options: `--level2` ... `--level6` start directly in a level, `--invincible`, `--hitbox` (hit boxes shown from the start), `--fixes` (the fixes of `FIXES.md` on from the start), `--input file` (plays the pad
 from a file of `first last mask` ranges instead of the keyboard), `--dump N name` (windowless: writes `name.bmp` and `name.wav` after N frames).
+
+### Fixes
+
+The port plays the original game. `FIXES.md` lists the corrections of the original that exist, each with its evidence and its effect on the TAS. They are off
+by default; the J key (or `--fixes`) switches them on, and the window title shows when they are on.
 
 ### Hit boxes
 

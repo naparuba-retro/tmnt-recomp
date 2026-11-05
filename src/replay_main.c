@@ -27,6 +27,7 @@
 #include "apu.h"
 #include "platform.h"
 #include "hitbox_view.h"
+#include "fixes.h"
 #include "enemy.h"
 #include "nmi.h"
 #include "sound.h"
@@ -599,6 +600,9 @@ int main(int argc, char **argv) {
         return 0;
     }
 #endif
+    if (getenv("TMNT_FIXES")) { /* tests only: the fixes of FIXES.md on (they are off otherwise, and then the replays are the original's) */
+        fix_set_all(1);
+    }
     if (getenv("TMNT_HITBOX")) { /* fills the hit box journal (tests: the game must not change, and the formula must match the game's boxes) */
         hitbox_set_enabled(1);
     }
