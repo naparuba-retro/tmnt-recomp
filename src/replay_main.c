@@ -614,6 +614,9 @@ int main(int argc, char **argv) {
         check_large = 1;
         atexit(large_view_report);
     }
+    if (getenv("TMNT_WATER_FIXES")) { /* tests only: the fixes of the water level on */
+        fix_set_water(1);
+    }
     if (getenv("TMNT_FIXES")) { /* tests only: the fixes of FIXES.md on (they are off otherwise, and then the replays are the original's) */
         fix_set_all(1);
     }

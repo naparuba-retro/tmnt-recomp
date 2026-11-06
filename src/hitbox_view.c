@@ -2,6 +2,7 @@
 #include <string.h>
 #include "game.h"
 #include "hitbox_view.h"
+#include "fixes.h"
 #include "platform.h"
 #include "player/tiles.h"
 
@@ -92,6 +93,12 @@ static void entity_rect(Game *g, int x, uint8_t rect[4]) {
         return;
     }
     rect[2] = (uint8_t)(M(EntY + x) - h);
+    if (fix_enabled(FIX_WATER_SPINNER) && (M(EntAnimId + x) == 0x57 || M(EntAnimId + x) == 0x58)) { /* PIZZA-003 (see collisions.c) */
+        uint8_t centre = (uint8_t)(M(EntY + x) + (M(EntAnimId + x) == 0x58 ? 4 : 0));
+        rect[2] = (uint8_t)(centre - (w - 1));
+        rect[3] = (uint8_t)(centre + (w - 1));
+        return;
+    }
     for (uint8_t i = 0;; i = (uint8_t)(i + 2)) {
         uint8_t lo = R6(0x9BC6 + i);
         if (lo == 0xFF) {

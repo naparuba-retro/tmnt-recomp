@@ -1,4 +1,5 @@
 /* Special zone of level 2 (dam): swimming. */
+#include "fixes.h"
 #include "game.h"
 #include "anim.h"
 #include "hal.h"
@@ -143,6 +144,9 @@ void player_swim(Game *g) /* B4 $A78B: state 15 */
             v = 0xFD;
         }
         M(EntVelY) = v;
+    }
+    if (!M(WaterCurrent) && fix_enabled(FIX_WATER_DRIFT)) {
+        M(EntVelXFrac) = 0; /* PIZZA-002: the current acts on the fraction of the speed, which the d-pad does not reset: it pushed the turtle for ever */
     }
     if (M(WaterCurrent)) { /* current */
         uint8_t y = R4(0xA9C0 + (M(WaterCurrent) >> 4));

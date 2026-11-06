@@ -1,7 +1,7 @@
 /* Player front-end (the executable `tmnt`): finds the ROM, runs the game at 60 frames per second and relays keys, picture and sound
  * through platform.h (Windows or SDL2). The pace comes from the sound card: 735 samples at 44100 Hz per frame.
  * Keys: arrows = d-pad, Z or W = B, X = A, Enter = Start, Tab or right Shift = Select, M = sound, P = pause, I = invincible,
- * H = hit boxes, J = the fixes of FIXES.md, F = no sprite flicker, L = large view, F5 = restart, F9 = rewind, F10 = capture, Esc = quit. */
+ * H = hit boxes, J = the fixes of FIXES.md, E = the water fixes, F = no sprite flicker, L = large view, F5 = restart, F9 = rewind, F10 = capture, Esc = quit. */
 #include <stdlib.h>
 #include <string.h>
 #include "fixes.h"
@@ -336,6 +336,9 @@ static void parse_options(int argc, char **argv) {
         if (!strcmp(argv[i], "--fixes")) {
             fix_set_all(1);
         }
+        if (!strcmp(argv[i], "--water-fixes")) {
+            fix_set_water(1);
+        }
         if (!strcmp(argv[i], "--no-flicker")) {
             ppu_set_sprite_limit(64);
         }
@@ -444,9 +447,9 @@ static void run_game_frame(Game *g, int audio) {
     if ((int)g->frame / 60 != last_title_frame && g->frame % 60 == 0) {
         char t[160];
         last_title_frame = (int)g->frame / 60;
-        snprintf(t, sizeof t, "TMNT (Europe) - port C | mode %d.%d%s%s%s%s%s", g->ram[GameMode], g->ram[GameSubMode], muted ? " | muted" : "",
-                 audio ? "" : " | no sound card", fix_any_enabled() ? " | FIXES ON (J)" : "", ppu_sprite_limit() > 8 ? " | NO FLICKER (F)" : "",
-                 large_view_enabled() ? " | LARGE VIEW (L)" : "");
+        snprintf(t, sizeof t, "TMNT (Europe) - port C | mode %d.%d%s%s%s%s%s%s", g->ram[GameMode], g->ram[GameSubMode], muted ? " | muted" : "",
+                 audio ? "" : " | no sound card", fix_any_enabled() ? " | FIXES ON (J)" : "", fix_water_enabled() ? " | WATER FIXES (E)" : "",
+                 ppu_sprite_limit() > 8 ? " | NO FLICKER (F)" : "", large_view_enabled() ? " | LARGE VIEW (L)" : "");
         platform_set_title(t);
     }
 }
@@ -490,6 +493,11 @@ int main(int argc, char **argv) {
             fix_toggle_all();
             platform_set_title(fix_any_enabled() ? "TMNT (Europe) - port C | FIXES ON (J to switch off)"
                                                  : "TMNT (Europe) - port C | fixes off (J to switch on)");
+        }
+        if (ev.water) { /* the fixes of the water level (key E), apart from the others */
+            fix_toggle_water();
+            platform_set_title(fix_water_enabled() ? "TMNT (Europe) - port C | WATER FIXES ON (E to switch off)"
+                                                   : "TMNT (Europe) - port C | water fixes off (E to switch on)");
         }
         if (ev.large) { /* the lines at the top of the screen show the map's row above, or the backdrop, not random tiles */
             large_view_set_enabled(!large_view_enabled());

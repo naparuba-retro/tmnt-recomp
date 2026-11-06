@@ -4,6 +4,7 @@
 #include "stage_play.h"
 #include "stage_play/collisions.h"
 #include "hitbox_view.h"
+#include "fixes.h"
 #define TODO_AREA "stage_play" /* prefix of the TODO traces of this file */
 
 /* --- collisions (B6 $9535) --- */
@@ -30,7 +31,14 @@ static void entity_hitbox_raw(Game *g, int x, uint8_t yi) /* B6 $9B11 GetEntityH
         M(TmpB + yi) = (uint8_t)(ey + M(Tmp0 + 1));
         return;
     }
-    M(TmpA + yi) = (uint8_t)(M(EntY + x) - M(Tmp0 + 1)); /* $9B90: enemies */
+    M(TmpA + yi) = (uint8_t)(M(EntY + x) - M(Tmp0 + 1));                                            /* $9B90: enemies */
+    if (fix_enabled(FIX_WATER_SPINNER) && (M(EntAnimId + x) == 0x57 || M(EntAnimId + x) == 0x58)) { /* PIZZA-003: the rotating bar, whose Y is its centre */
+        uint8_t half = (uint8_t)(M(Tmp0) - 1);                                        /* a square a little smaller than the sprite, centred on it */
+        uint8_t centre = (uint8_t)(M(EntY + x) + (M(EntAnimId + x) == 0x58 ? 4 : 0)); /* the disc is drawn in the lower half of its 8x16 sprite */
+        M(TmpA + yi) = (uint8_t)(centre - half);
+        M(TmpB + yi) = (uint8_t)(centre + half);
+        return;
+    }
     for (uint8_t i = 0;; i = (uint8_t)(i + 2)) {
         uint8_t lo = R6(0x9BC6 + i);
         if (lo == 0xFF) {

@@ -6,12 +6,15 @@ has a flag in the code (`src/fixes.h`), a sheet here with its evidence, and its 
 
 How to switch them on, for tests and demonstrations:
 
-- in the game, the **J** key switches all the fixes on or off (the window title shows `FIXES ON`), or start with `--fixes`;
-- in the replay tool, the environment variable `TMNT_FIXES=1` (`TMNT_FIXES=1 bash tools/verify_all.sh` shows where the replays leave the original's).
+- in the game, the **J** key switches the fixes on or off (the window title shows `FIXES ON`), or start with `--fixes`;
+- the fixes of the water level (dam) are a group of their own: the **E** key (title: `WATER FIXES`), or `--water-fixes`; J does not touch them;
+- in the replay tool, the environment variable `TMNT_FIXES=1` (all of them; `TMNT_FIXES=1 bash tools/verify_all.sh` shows where the replays leave the original's) or `TMNT_WATER_FIXES=1` (the water ones only).
 
 | Id | Fix | Evidence | Effect on the TAS |
 |---|---|---|---|
 | PIZZA-001 | Hitting a ceiling in a jump no longer stops the horizontal speed of the turtle | the code, and the original game itself (BizHawk) | the TAS leaves the original's at image 3921 |
+| PIZZA-002 (water, key E) | The current of the water no longer leaves a speed that pushes the swimming turtle for ever | the code, the TAS (BizHawk), and Upsilandre's blog | the TAS leaves the original's at image 10854 |
+| PIZZA-003 (water, key E) | The rotating bar of the dam has a box that matches its sprite | the code, a measure in the TAS, and Upsilandre's blog | none by itself (the TAS already leaves the original's at 10854) |
 
 ## PIZZA-001: a ceiling no longer stops the turtle's horizontal speed
 
@@ -81,3 +84,39 @@ frames where the head is inside a blocking tile.
 
 **Effect on the TAS.** With the fix on, the replay leaves the original's at image 3921 (US ROM) and image 3402 (European reference game), and the runs differ
 from there on. With the fix off, nothing changes.
+
+## PIZZA-002: the current of the water no longer pushes the turtle for ever (water group, key E)
+
+**Problem.** In the swimming zone of the dam, a water current that the turtle has left goes on pushing it sideways, even with the d-pad released, until it
+touches the ground. This is what makes the first seaweed field so hard: the corridors are 32 pixels wide, the turtle's box is wide, and the current that is
+set on the screen before (when the bomb in the right corner is approached) is still pushing in a field that has no current (its bubbles rise straight).
+
+**Cause (B4 `$A78B`, `src/player/swim.c`).** Every frame the horizontal speed `$04E0` is set from the d-pad (a table, whole pixels only). A current adds its
+strength to the **fraction** of the speed, `$04F0`, which the d-pad never touches. When the turtle leaves the current, the fraction stays as it was, and as
+it is added to the position at every frame the turtle keeps drifting (a fraction of $F0 is almost one pixel per frame).
+
+**Fix.** When there is no current (`$7E` is 0), the fraction `$04F0` is set to 0 in the swimming state. Inside a current nothing changes.
+
+**Intention assumed.** The zone of the seaweed is marked "no current", and nothing in the code resets the fraction: the drift looks like an oversight of
+the same kind as the one that Upsilandre describes on his blog ("Tous les secrets de Teenage Mutant Ninja Turtles", 2022), where the lateral current is a
+side effect of the bomb, not a rule.
+
+**Evidence.** In the reference TAS (US ROM), sampled while swimming (two frames out of thirty), with no current (`$7E` = 0) the fraction `$04F0` was not 0 in
+26 of the 98 samples (it stays at `$F0`), and with the current 41 it goes through `$F0`, `$E0`, `$C0`, `$B0`, `$A0`, `$80`, `$70`: the speed left by the current. With
+the fix (`TMNT_WATER_FIXES=1`) the TAS leaves the original's at image 10854, in the dam.
+
+## PIZZA-003: the rotating bar of the dam has a box that matches its sprite (water group, key E)
+
+**Problem.** The rotating bar of the dam (an anneau at the centre and small discs turning around it) is dangerous by contact, but its hit boxes hang above the
+sprites: about ten pixels too high, as Upsilandre notes on his blog.
+
+**Cause (B6 `$9B90`-`$9BC6`, `src/stage_play/collisions.c`).** The Y of an entity is taken as its feet: the box goes from Y - h to Y - 2, except for the types of
+a short table ($9BC6: `$23`-`$26` and `$89`) where the box goes to Y + h. The bar's elements (types `$1B` to `$1E`, animations `$57` and `$58`) are not in it, but their
+Y is the centre of the sprite. Measured in the TAS (US ROM), at image 10940: the ring at (213, 88) has the box lines 75 to 86 while its sprite covers about 80 to 96; a disc at (200, 72) has
+the lines 60 to 70 for a sprite centred on 72. The boxes are tall, narrow and above the sprites (see the H display).
+
+**Fix.** For these elements, the box is a square with a half side of the half width minus 1 (12 pixels for the ring, 6 for the discs), a little
+smaller than the sprite. It is centred on Y for the ring; the discs are drawn in the lower half of their 8x16 sprite, so their box is centred 4 pixels below Y, so that a touch must be a real touch. The H display draws the same box (checked against the game's: 0 difference on 16 673 boxes
+of the TAS).
+
+**Intention assumed.** The Y of these elements is their centre (their sprites are centred on it), and no box was meant to hang 8 pixels above them.
