@@ -82,8 +82,8 @@ static int build_row(const Game *source, PpuRowAbove *out, int *slot_ok, int fir
     g->trace = NULL;
     unsigned camera_y = M(CameraYLo) | M(CameraYHi) << 8, camera_x = M(CameraXLo) | M(CameraXHi) << 8;
     int exists;
-    unsigned y = row_above_y(source, camera_y, &exists), x0 = camera_x & 0xFFF0;
-    if (!exists) { /* the picture starts at the top of the map: nothing is above */
+    unsigned y = row_above_y(source, camera_y, &exists), x0 = (camera_x + 8) & 0xFFF0; /* the game's own start (scroll_camera_y, B7 $DC8B) */
+    if (!exists) {                                                                     /* the picture starts at the top of the map: nothing is above */
         free(g);
         return 0;
     }
@@ -93,13 +93,16 @@ static int build_row(const Game *source, PpuRowAbove *out, int *slot_ok, int fir
     memset(written, 0, sizeof written);
     slot_row = -1;
     ppu_set_write_hook(on_write);
-    /* two rows of 16 blocks cover the 256 pixels of the screen, whatever the camera's position inside a block */
+    /* One row of 16 blocks, as the game draws it (the video memory has 32 columns that wrap: a second pass at another column would write over the first
+     * ones). The routine keeps state from one call to the next (the game calls it row after row), so it is called once for nothing, and the second
+     * call is the one that counts. */
     draw_row(g, y, x0);
-    draw_row(g, y, x0 + 16);
+    memset(written, 0, sizeof written);
+    slot_row = -1;
+    draw_row(g, y, x0);
     int first_slot_row = slot_row, first_slot_nt = slot_nt;
     if (y & 8) { /* the lower row of a pair: the attribute byte, shared by both, is sent with the upper one */
         draw_row(g, y - 8, x0);
-        draw_row(g, y - 8, x0 + 16);
     }
     ppu_set_write_hook(NULL);
     int mirror_v = g->ppu.mirror_v, found = 0;
