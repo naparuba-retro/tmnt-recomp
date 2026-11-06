@@ -73,17 +73,28 @@ tells you where to put the file. The ROM can also be given as an argument: `tmnt
 | H | show / hide the hit boxes (see below) |
 | J | switch the fixes on / off (see `FIXES.md`) |
 | F | remove the sprite flicker (see below) |
+| L | large view: no random tiles at the top of the screen (see below) |
 | Esc | quit |
 
 The first game controller found works too: d-pad or left stick, A = jump, X or B = attack, Start, Back = Select, left trigger = rewind.
 
-Options: `--level2` ... `--level6` start directly in a level, `--invincible`, `--hitbox` (hit boxes shown from the start), `--fixes` (the fixes of `FIXES.md` on from the start), `--no-flicker` (no sprite flicker from the start), `--input file` (plays the pad
+Options: `--level2` ... `--level6` start directly in a level, `--invincible`, `--hitbox` (hit boxes shown from the start), `--fixes` (the fixes of `FIXES.md` on from the start), `--no-flicker` (no sprite flicker from the start), `--large` (large view from the start), `--input file` (plays the pad
 from a file of `first last mask` ranges instead of the keyboard), `--dump N name` (windowless: writes `name.bmp` and `name.wav` after N frames).
 
 ### Fixes
 
 The port plays the original game. `FIXES.md` lists the corrections of the original that exist, each with its evidence and its effect on the TAS. They are off
 by default; the J key (or `--fixes`) switches them on, and the window title shows when they are on.
+
+### Large view
+
+In a level the game scrolls the picture 4 lines down, so the first 4 lines of the screen show the row above the map, which is not there: the PPU reads the
+attribute table as if it were tiles (rows 30 and 31), and a band of random tiles appears at the top (grey blocks on the water, little boxes in a sewer). A
+TV of the time hid those lines in its overscan, and the port shows them like Mesen does. The L key (or `--large`) replaces them, without cutting the
+picture: with the row of the level that is really above the screen when the map has one (the game's own row drawing is run on a copy of the state to get
+it, at the vertical scrolls of the buildings for instance), and with the backdrop colour (black in the sewers) when it has not (the top of the map, the
+rooms seen from the side, the title screens). It changes only what is displayed: the game's memory, the replays and the validation are the same, and the
+replay tool keeps the NES picture. About 98 % of the frames that have this band are of the second kind.
 
 ### Sprite flicker
 

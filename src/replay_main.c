@@ -27,6 +27,7 @@
 #include "apu.h"
 #include "platform.h"
 #include "hitbox_view.h"
+#include "large_view.h"
 #include "fixes.h"
 #include "enemy.h"
 #include "nmi.h"
@@ -375,6 +376,10 @@ static void dump_outputs(Replay *r) {
         fwrite(r->picture, 1, sizeof r->picture, stdout);
     }
     if (dir && r->step && g->frame % r->step == 0) {
+        if (getenv("TMNT_LARGE_PIX")) { /* tests only: the pictures are drawn with the large view */
+            large_view_set_enabled(1);
+            large_view_prepare(g);
+        }
         ppu_render(g, r->picture);
         FILE *f = create_output(dir, "%s/p%05u.pix", g->frame);
         if (f) {
@@ -448,6 +453,8 @@ static void audio_finish(void) {
     }
 }
 
+static int check_large; /* TMNT_LARGE=1 */
+
 static void run_frame(Replay *r) {
     Game *g = r->g;
     if (snd_count_file) {
@@ -457,6 +464,9 @@ static void run_frame(Replay *r) {
     apply_inputs(r);
     apply_random_seed(r);
     nmi_frame(g);
+    if (check_large) { /* tests only: rebuilds the row above the picture at every frame where it is needed and checks it (see large_view.h) */
+        large_view_check(g);
+    }
     for (int extra = indexed_get(&r->lag_extra, g->frame) - (int)g->frame_lag_updates; extra > 0; extra--) {
         sound_update(g); /* measured "lost" frames */
     }
@@ -600,6 +610,10 @@ int main(int argc, char **argv) {
         return 0;
     }
 #endif
+    if (getenv("TMNT_LARGE")) {
+        check_large = 1;
+        atexit(large_view_report);
+    }
     if (getenv("TMNT_FIXES")) { /* tests only: the fixes of FIXES.md on (they are off otherwise, and then the replays are the original's) */
         fix_set_all(1);
     }

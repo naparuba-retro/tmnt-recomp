@@ -6,6 +6,19 @@
 #include <stdio.h>
 #include "game.h"
 
+static int large_on;                 /* large view (key L): see ppu_set_large() */
+static const PpuRowAbove *large_row; /* the row above the picture, or NULL when there is none */
+static PpuWriteHook write_hook;      /* sees the writes to the name tables (the large view runs the game's row drawing on a copy) */
+
+void ppu_set_large(int on, const PpuRowAbove *row_above) {
+    large_on = on;
+    large_row = row_above;
+}
+
+void ppu_set_write_hook(PpuWriteHook hook) {
+    write_hook = hook;
+}
+
 static uint8_t *vram_ptr(Game *g, uint16_t a) {
     a &= 0x3FFF;
     if (a >= 0x3000 && a < 0x3F00) {
@@ -63,6 +76,9 @@ void ppu_write(Game *g, int reg, uint8_t val) {
             uint8_t *d = vram_ptr(g, p->v);
             if (d) {
                 *d = val;
+                if (write_hook) {
+                    write_hook((uint16_t)(p->v & 0x3FFF), (int)(d - p->vram), val);
+                }
             }
             p->v = (uint16_t)(p->v + ((p->ctrl & 4) ? 32 : 1));
             break;
@@ -130,11 +146,26 @@ static void draw_background(Game *g, uint8_t *out, uint8_t *bg_c, int pass_from,
                 continue;
             }
             int tx = sx >> 3;
-            uint16_t base = (uint16_t)(0x2000 + nt * 0x400);
-            uint8_t tile = *vram_ptr(g, (uint16_t)(base + ty * 32 + tx));
-            uint8_t attr = *vram_ptr(g, (uint16_t)(base + 0x3C0 + (ty >> 2) * 8 + (tx >> 2)));
-            int shift = ((ty & 2) << 1) | (tx & 2);
-            const uint8_t *colours = &p->pal[((attr >> shift) & 3) * 4];
+            uint8_t tile, palette;
+            if (large_on && ty >= 30) {
+                /* Rows 30 and 31 are not rows of the picture: the PPU reads the attribute table as tiles there. With the large view, the tile of the row
+                 * above the picture is used instead, and the backdrop colour where there is none. */
+                int idx = (p->mirror_v ? (nt & 1) << 5 : 0) | tx;
+                if (!large_row || !large_row->have[idx]) {
+                    memset(bg_row + x, 0, (size_t)len);
+                    x += len;
+                    continue;
+                }
+                tile = large_row->tile[idx];
+                palette = large_row->pal[idx];
+            } else {
+                uint16_t base = (uint16_t)(0x2000 + nt * 0x400);
+                tile = *vram_ptr(g, (uint16_t)(base + ty * 32 + tx));
+                uint8_t attr = *vram_ptr(g, (uint16_t)(base + 0x3C0 + (ty >> 2) * 8 + (tx >> 2)));
+                int shift = ((ty & 2) << 1) | (tx & 2);
+                palette = (attr >> shift) & 3;
+            }
+            const uint8_t *colours = &p->pal[palette * 4];
             uint16_t a = (uint16_t)(tile * 16 + (sy & 7));
             uint8_t lo = chr_byte(g, bg_hi, a), hi = chr_byte(g, bg_hi, (uint16_t)(a + 8));
             for (int k = 0; k < len; k++) {

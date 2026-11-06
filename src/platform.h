@@ -24,6 +24,7 @@ typedef struct {
     int hitbox;     /* H */
     int fix;        /* J */
     int flicker;    /* F */
+    int large;      /* L */
     int restart;    /* F5 */
     int rewind;     /* F9 */
     int capture;    /* F10 */
