@@ -1,7 +1,7 @@
 /* Player front-end (the executable `tmnt`): finds the ROM, runs the game at 60 frames per second and relays keys, picture and sound
  * through platform.h (Windows or SDL2). The pace comes from the sound card: 735 samples at 44100 Hz per frame.
  * Keys: arrows = d-pad, Z or W = B, X = A, Enter = Start, Tab or right Shift = Select, M = sound, P = pause, I = invincible,
- * H = hit boxes, J = the fixes of FIXES.md, F5 = restart, F9 = rewind, F10 = capture, Esc = quit. */
+ * H = hit boxes, J = the fixes of FIXES.md, F = no sprite flicker, F5 = restart, F9 = rewind, F10 = capture, Esc = quit. */
 #include <stdlib.h>
 #include <string.h>
 #include "fixes.h"
@@ -10,6 +10,7 @@
 #include "hitbox_view.h"
 #include "nmi.h"
 #include "platform.h"
+#include "ppu.h"
 
 #define TITLE "TMNT (Europe) - port C"
 
@@ -333,6 +334,9 @@ static void parse_options(int argc, char **argv) {
         if (!strcmp(argv[i], "--fixes")) {
             fix_set_all(1);
         }
+        if (!strcmp(argv[i], "--no-flicker")) {
+            ppu_set_sprite_limit(64);
+        }
         if (!strcmp(argv[i], "--input") && i + 1 < argc) {
             load_pad_script(argv[i + 1]);
         }
@@ -435,8 +439,8 @@ static void run_game_frame(Game *g, int audio) {
     if ((int)g->frame / 60 != last_title_frame && g->frame % 60 == 0) {
         char t[128];
         last_title_frame = (int)g->frame / 60;
-        snprintf(t, sizeof t, "TMNT (Europe) - port C | mode %d.%d%s%s%s", g->ram[GameMode], g->ram[GameSubMode], muted ? " | muted" : "",
-                 audio ? "" : " | no sound card", fix_any_enabled() ? " | FIXES ON (J)" : "");
+        snprintf(t, sizeof t, "TMNT (Europe) - port C | mode %d.%d%s%s%s%s", g->ram[GameMode], g->ram[GameSubMode], muted ? " | muted" : "",
+                 audio ? "" : " | no sound card", fix_any_enabled() ? " | FIXES ON (J)" : "", ppu_sprite_limit() > 8 ? " | NO FLICKER (F)" : "");
         platform_set_title(t);
     }
 }
@@ -480,6 +484,11 @@ int main(int argc, char **argv) {
             fix_toggle_all();
             platform_set_title(fix_any_enabled() ? "TMNT (Europe) - port C | FIXES ON (J to switch off)"
                                                  : "TMNT (Europe) - port C | fixes off (J to switch on)");
+        }
+        if (ev.flicker) { /* all the sprites of a line are drawn, not only 8 (display only) */
+            ppu_set_sprite_limit(ppu_sprite_limit() > 8 ? 8 : 64);
+            platform_set_title(ppu_sprite_limit() > 8 ? "TMNT (Europe) - port C | NO FLICKER (F to switch off)"
+                                                      : "TMNT (Europe) - port C | flicker as on the NES (F to remove it)");
         }
         if (ev.invincible) {
             invincible ^= 1;

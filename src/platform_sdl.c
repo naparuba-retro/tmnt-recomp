@@ -118,6 +118,9 @@ void platform_poll(PlatformEvents *ev) {
                 case SDLK_j:
                     pending.fix = 1;
                     break;
+                case SDLK_f:
+                    pending.flicker = 1;
+                    break;
                 case SDLK_F5:
                     pending.restart = 1;
                     break;

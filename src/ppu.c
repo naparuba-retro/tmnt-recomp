@@ -180,6 +180,16 @@ static int sprite0_hit_line(Game *g, const uint8_t *bg_c) {
     return hit;
 }
 
+static int sprite_limit = 8; /* sprites per line: 8 on the NES */
+
+void ppu_set_sprite_limit(int per_line) {
+    sprite_limit = per_line;
+}
+
+int ppu_sprite_limit(void) {
+    return sprite_limit;
+}
+
 static void draw_sprites(Game *g, uint8_t *out, const uint8_t *bg_c) {
     Ppu *p = &g->ppu;
     int tall = (p->ctrl & 0x20) != 0, h = tall ? 16 : 8;
@@ -192,8 +202,8 @@ static void draw_sprites(Game *g, uint8_t *out, const uint8_t *bg_c) {
             if (row < 0 || row >= h) {
                 continue;
             }
-            if (++count > 8) {
-                break; /* at most 8 sprites per line */
+            if (++count > sprite_limit) {
+                break; /* at most 8 sprites per line on the NES: the others disappear, and which ones changes every frame (the flicker) */
             }
             uint8_t tile = p->oam[s * 4 + 1], attr = p->oam[s * 4 + 2];
             int sx = p->oam[s * 4 + 3];

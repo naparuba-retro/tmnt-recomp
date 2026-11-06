@@ -23,6 +23,7 @@ typedef struct {
     int invincible; /* I */
     int hitbox;     /* H */
     int fix;        /* J */
+    int flicker;    /* F */
     int restart;    /* F5 */
     int rewind;     /* F9 */
     int capture;    /* F10 */

@@ -72,17 +72,26 @@ tells you where to put the file. The ROM can also be given as an argument: `tmnt
 | I | invincibility cheat |
 | H | show / hide the hit boxes (see below) |
 | J | switch the fixes on / off (see `FIXES.md`) |
+| F | remove the sprite flicker (see below) |
 | Esc | quit |
 
 The first game controller found works too: d-pad or left stick, A = jump, X or B = attack, Start, Back = Select, left trigger = rewind.
 
-Options: `--level2` ... `--level6` start directly in a level, `--invincible`, `--hitbox` (hit boxes shown from the start), `--fixes` (the fixes of `FIXES.md` on from the start), `--input file` (plays the pad
+Options: `--level2` ... `--level6` start directly in a level, `--invincible`, `--hitbox` (hit boxes shown from the start), `--fixes` (the fixes of `FIXES.md` on from the start), `--no-flicker` (no sprite flicker from the start), `--input file` (plays the pad
 from a file of `first last mask` ranges instead of the keyboard), `--dump N name` (windowless: writes `name.bmp` and `name.wav` after N frames).
 
 ### Fixes
 
 The port plays the original game. `FIXES.md` lists the corrections of the original that exist, each with its evidence and its effect on the TAS. They are off
 by default; the J key (or `--fixes`) switches them on, and the window title shows when they are on.
+
+### Sprite flicker
+
+The NES draws at most 8 sprites per line, and the game changes at every frame which ones are kept, so that no character vanishes for good: on a crowded line,
+parts of the characters blink. The port does the same, as the original does. The F key (or `--no-flicker`) draws all the sprites of a line instead. It
+changes only what is displayed: the game's memory and the replays are the same, and the replay tool keeps the 8 per line. Over the reference game and the TAS,
+the line limit drops sprites in about a quarter of the frames (counting the transparent parts of the sprites); the budget of 64 sprites per frame, which this
+does not remove, is reached in less than 0.5 % of them.
 
 ### Hit boxes
 

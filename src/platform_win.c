@@ -43,6 +43,8 @@ static LRESULT CALLBACK wndproc(HWND h, UINT m, WPARAM w, LPARAM l) {
                 pending.hitbox = 1;
             } else if (w == 'J') {
                 pending.fix = 1;
+            } else if (w == 'F') {
+                pending.flicker = 1;
             } else if (w == VK_F5) {
                 pending.restart = 1;
             } else if (w == VK_F9) {
