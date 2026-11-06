@@ -10,9 +10,26 @@ static int large_on;                 /* large view (key L): see ppu_set_large() 
 static const PpuRowAbove *large_row; /* the row above the picture, or NULL when there is none */
 static PpuWriteHook write_hook;      /* sees the writes to the name tables (the large view runs the game's row drawing on a copy) */
 
-void ppu_set_large(int on, const PpuRowAbove *row_above) {
+static const PpuRowAbove *large_top;         /* the first rows of the picture, rebuilt from the map */
+static const int *large_top_ty;              /* their rows in the name table */
+static int large_top_count, large_top_lines; /* how many, and how many lines of the picture use them */
+
+void ppu_set_large(int on, const PpuRowAbove *row_above, const PpuRowAbove *top_rows, const int *top_ty, int top_count, int top_lines) {
     large_on = on;
     large_row = row_above;
+    large_top = top_rows;
+    large_top_ty = top_ty;
+    large_top_count = top_count;
+    large_top_lines = top_lines;
+}
+
+static int top_row_index(int ty) {
+    for (int k = 0; k < large_top_count; k++) {
+        if (large_top_ty[k] == ty) {
+            return k;
+        }
+    }
+    return -1;
 }
 
 void ppu_set_write_hook(PpuWriteHook hook) {
@@ -147,6 +164,7 @@ static void draw_background(Game *g, uint8_t *out, uint8_t *bg_c, int pass_from,
             }
             int tx = sx >> 3;
             uint8_t tile, palette;
+            int top_k = -1;
             if (large_on && ty >= 30) {
                 /* Rows 30 and 31 are not rows of the picture: the PPU reads the attribute table as tiles there. With the large view, the tile of the row
                  * above the picture is used instead, and the backdrop colour where there is none. */
@@ -158,6 +176,12 @@ static void draw_background(Game *g, uint8_t *out, uint8_t *bg_c, int pass_from,
                 }
                 tile = large_row->tile[idx];
                 palette = large_row->pal[idx];
+            } else if (large_on && pass_from == 0 && y < large_top_lines && (top_k = top_row_index(ty)) >= 0 &&
+                       large_top[top_k].have[(p->mirror_v ? (nt & 1) << 5 : 0) | tx]) {
+                /* the first rows of the picture: the tile and the palette of the map */
+                int idx = (p->mirror_v ? (nt & 1) << 5 : 0) | tx;
+                tile = large_top[top_k].tile[idx];
+                palette = large_top[top_k].pal[idx];
             } else {
                 uint16_t base = (uint16_t)(0x2000 + nt * 0x400);
                 tile = *vram_ptr(g, (uint16_t)(base + ty * 32 + tx));

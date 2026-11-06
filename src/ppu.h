@@ -19,7 +19,10 @@ typedef struct {
     uint8_t tile[64];
     uint8_t pal[64]; /* palette 0-3 of the tile */
 } PpuRowAbove;
-void ppu_set_large(int on, const PpuRowAbove *row_above);
+/* `top_rows` (`top_count` of them, at the rows `top_ty` of the name table) and `top_lines`: the first rows of the picture are drawn with these tiles and
+ * palettes (the ones of the map) for the first `top_lines` lines; the video memory does not always hold them up to date (the game scrolls first and draws
+ * the new row later, and the palette of the lower row of a pair arrives with the upper one). */
+void ppu_set_large(int on, const PpuRowAbove *row_above, const PpuRowAbove *top_rows, const int *top_ty, int top_count, int top_lines);
 
 /* Called for every write of a tile or an attribute to the name tables: the address ($2000-$2FFF), the index in the 2 KB of video memory, the value. */
 typedef void (*PpuWriteHook)(uint16_t addr, int vram_index, uint8_t value);

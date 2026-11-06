@@ -9,7 +9,8 @@
 #include "stage_map.h"
 
 static int enabled;
-static PpuRowAbove row_above;
+static PpuRowAbove row_above, rows_top[3];
+static int rows_top_ty[3];
 
 /* What the game's row drawing writes to the video memory of the copy: which bytes, and where the first tile goes. */
 static uint8_t written[0x800];
@@ -17,6 +18,9 @@ static int slot_nt, slot_row;
 
 static void on_write(uint16_t addr, int vram_index, uint8_t value) {
     (void)value;
+    if (vram_index < 0 || vram_index >= 0x800) { /* a palette write: the palettes follow the name tables in memory */
+        return;
+    }
     written[vram_index] = 1;
     if ((addr & 0x3FF) < 0x3C0 && slot_row < 0) {
         slot_nt = vram_index >> 10;
@@ -45,34 +49,39 @@ static void draw_row(Game *g, unsigned y, unsigned x) {
     flush_ppu_buffer(g);
 }
 
-/* The name table that is just above the one shown at the top of the picture, as a physical table (index in the 2 KB of video memory). */
+/* The physical name table shown at the top of the picture, and the one above it. */
+static int name_table_top(const Game *g) {
+    int nn = (g->ppu.t >> 10) & 3;
+    return g->ppu.mirror_v ? (nn & 1) : (nn >> 1);
+}
+
 static int name_table_above(const Game *g) {
     int nn = (g->ppu.t >> 10) & 3;
     return g->ppu.mirror_v ? ((nn ^ 2) & 1) : ((nn ^ 2) >> 1);
 }
 
-/* The world position of the row that is just above the picture. The video memory holds the map in pages of 240 lines (30 rows), one name table per page,
- * alternately (B7 $DF19, split_y). The picture starts at the top of a name table, so the row above it is the last row of the previous page, which is
- * the page that has the other name table: of the two pages around the camera, the one that goes with the name table shown at the top is the first of the
- * picture. Returns 0 (and `*exists` = 0) when that page is the first of the map: there is nothing above. */
-static unsigned row_above_y(const Game *source, unsigned camera_y, int *exists) {
-    int nn = (source->ppu.t >> 10) & 3, nt = source->ppu.mirror_v ? (nn & 1) : (nn >> 1);
+/* The world position of the first row of the picture's page. The video memory holds the map in pages of 240 lines (30 rows), one name table per page,
+ * alternately (B7 $DF19, split_y). The page shown at the top is the one, among those that have the name table shown there, that is the nearest to the
+ * camera. Page 0 is the first of the map. */
+static unsigned page_top_y(const Game *source, unsigned camera_y, int ring_row, unsigned *page_number) {
+    int nt = name_table_top(source);
     unsigned best = 0, best_distance = 0xFFFFFF;
     for (unsigned page = (unsigned)nt; page < 0x80; page += 2) {
-        unsigned top = page * 240, distance = top > camera_y ? top - camera_y : camera_y - top;
+        unsigned top = page * 240 + (unsigned)(ring_row > 0 ? ring_row * 8 : 0), distance = top > camera_y ? top - camera_y : camera_y - top;
         if (distance < best_distance) {
             best_distance = distance;
             best = page;
         }
     }
-    *exists = best > 0;
-    return best * 240; /* the world position of the first row of the picture */
+    *page_number = best_distance > 16 ? ~0u : best; /* the camera and the scroll registers disagree (a scene change): no rebuild */
+    return best * 240;
 }
 
-/* Rebuilds into `out` the row above the picture; returns 0 when the map has none. `slot_ok`, if not NULL, tells whether the row went to the slot of the
- * video memory that is just above the picture. With `first_row`, rebuilds the first row of the picture instead (tests: that one is on the screen, so the
- * video memory holds it for sure). */
-static int build_row(const Game *source, PpuRowAbove *out, int *slot_ok, int first_row) {
+/* Rebuilds into `out` a row of the level's map, with the tiles and the palettes of the level data (the game's own row drawing, run on a copy of the
+ * state). `ring_row` is its row in the video memory, 0 to 29 (in the page shown at the top), or -1 for the row just above the picture, which is the last
+ * row of the previous page; this one does not exist (returns 0) when the picture is in the first page of the map. `slot_ok`, if not NULL, tells whether
+ * the row went to the slot of the video memory that was expected. */
+static int build_row(const Game *source, PpuRowAbove *out, int *slot_ok, int ring_row) {
     memset(out, 0, sizeof *out);
     Game *g = malloc(sizeof *g);
     if (!g) {
@@ -80,16 +89,17 @@ static int build_row(const Game *source, PpuRowAbove *out, int *slot_ok, int fir
     }
     memcpy(g, source, sizeof *g);
     g->trace = NULL;
-    unsigned camera_y = M(CameraYLo) | M(CameraYHi) << 8, camera_x = M(CameraXLo) | M(CameraXHi) << 8;
-    int exists;
-    unsigned y = row_above_y(source, camera_y, &exists), x0 = (camera_x + 8) & 0xFFF0; /* the game's own start (scroll_camera_y, B7 $DC8B) */
-    if (!exists) {                                                                     /* the picture starts at the top of the map: nothing is above */
+    unsigned camera_y = M(CameraYLo) | M(CameraYHi) << 8, camera_x = M(CameraXLo) | M(CameraXHi) << 8, page;
+    unsigned y = page_top_y(source, camera_y, ring_row, &page), x0 = (camera_x + 8) & 0xFFF0; /* the game's own start (scroll_camera_y, B7 $DC8B) */
+    if (page == ~0u) {
         free(g);
         return 0;
     }
-    if (!first_row) {
-        y -= 8;
+    if (ring_row < 0 && page == 0) { /* the picture starts at the top of the map: nothing is above */
+        free(g);
+        return 0;
     }
+    y = y + (unsigned)(ring_row * 8); /* for the row above: the last row of the previous page */
     memset(written, 0, sizeof written);
     slot_row = -1;
     ppu_set_write_hook(on_write);
@@ -123,42 +133,72 @@ static int build_row(const Game *source, PpuRowAbove *out, int *slot_ok, int fir
         }
     }
     if (slot_ok) {
-        int nn = (source->ppu.t >> 10) & 3, nt_top = mirror_v ? (nn & 1) : (nn >> 1);
-        *slot_ok = first_row ? first_slot_row == 0 && (mirror_v || first_slot_nt == nt_top)
-                             : first_slot_row == 29 && (mirror_v || first_slot_nt == name_table_above(source));
+        int expected_row = ring_row < 0 ? 29 : ring_row, expected_nt = ring_row < 0 ? name_table_above(source) : name_table_top(source);
+        *slot_ok = first_slot_row == expected_row && (mirror_v || first_slot_nt == expected_nt);
     }
     free(g);
     return found > 0;
 }
 
-static int garbage_lines(const Game *g) {
-    return ((g->ppu.t >> 5) & 31) >= 30;
+/* The row of the video memory that the PPU shows first: its line (0-29, or 30 and 31 for the attribute table) and how many of its lines are above the top
+ * of the picture. */
+static int first_row(const Game *g) {
+    return (g->ppu.t >> 5) & 31;
 }
+
+static int first_row_hidden_lines(const Game *g) {
+    return (g->ppu.t >> 12) & 7;
+}
+
+static uint8_t vram_tile(const Game *g, int nt, int row, int col);
 
 void large_view_prepare(Game *g) {
     if (!enabled) {
-        ppu_set_large(0, NULL);
+        ppu_set_large(0, NULL, NULL, NULL, 0, 0);
         return;
     }
     memset(&row_above, 0, sizeof row_above);
-    if (garbage_lines(g)) {
-        build_row(g, &row_above, NULL, 0);
+    memset(rows_top, 0, sizeof rows_top);
+    int count = 0;
+    if (first_row(g) >= 30) { /* the lines read the attribute table: the row above, or the backdrop */
+        build_row(g, &row_above, NULL, -1);
+    } else if (g->ram[GameMode] == 4) { /* in a level only: the map means nothing in the other scenes */
+        /* The first rows of the picture (the 16 first lines, which a TV hid in part) are read from the map: the video memory does not always hold them up
+         * to date. When the camera goes up, the game scrolls first and draws the new row later; and the palette of the lower row of a pair of rows is sent
+         * with the upper one, so it is stale for a while. */
+        for (int k = 0; k < 3 && first_row(g) + k < 30; k++) {
+            if (build_row(g, &rows_top[count], NULL, first_row(g) + k)) {
+                rows_top_ty[count++] = first_row(g) + k;
+            }
+        }
     }
-    ppu_set_large(1, &row_above);
+    ppu_set_large(1, &row_above, rows_top, rows_top_ty, count, 16);
 }
 
 /* --- tests --- */
 static unsigned frames_checked, frames_with_row, state_changed, slot_wrong, fresh_frames, fresh_equal, fresh_different;
 static unsigned frames_top_identical, frames_top_partial, frames_top_all_different;
 static unsigned top_slot_wrong, top_missing, top_tiles_equal, top_tiles_different, top_pal_equal, top_pal_different;
+static unsigned partial_frames, partial_pal_frames_different, partial_tiles_equal, partial_tiles_different, partial_pal_equal, partial_pal_different;
 static PpuRowAbove prev_built;
 static int prev_valid, prev_nt;
 static unsigned prev_frame;
 static uint8_t prev_row[32];
 
-/* Two things are checked. The state of the game must not change when the row is rebuilt. And the rebuilt row must be the one the game draws: when the
- * camera goes up the game writes that very row to the video memory, so the tiles it writes at the frame N+1 must be the ones rebuilt at the frame N. (The
- * video memory itself is not a reference before that: it holds the row only if the player came from there, and not always completely.) */
+/* The tiles and the palettes that the video memory holds for the row `row` of the name table `nt`, column `col`. */
+static uint8_t vram_tile(const Game *g, int nt, int row, int col) {
+    return g->ppu.vram[nt * 0x400 + row * 32 + col];
+}
+
+static uint8_t vram_palette(const Game *g, int nt, int row, int col) {
+    uint8_t attr = g->ppu.vram[nt * 0x400 + 0x3C0 + (row >> 2) * 8 + (col >> 2)];
+    return (attr >> (((row & 2) << 1) | (col & 2))) & 3;
+}
+
+/* Three things are checked. The state of the game must not change when a row is rebuilt. The row above the picture, rebuilt at the frame N, must be the
+ * one the game draws when the camera goes up: the tiles it writes at the frame N+1 must be the same. And the rebuilt rows must be those of the video
+ * memory when the row is on the screen: for the first row of the picture (always on the screen), and for the row that is shown by its lower lines at the
+ * top, where the palettes of the video memory are the ones that are sometimes not up to date. */
 void large_view_check(Game *g) {
     int nt_above = name_table_above(g), mirror_v = g->ppu.mirror_v;
     const uint8_t *row29 = &g->ppu.vram[nt_above * 0x400 + 29 * 32];
@@ -179,17 +219,39 @@ void large_view_check(Game *g) {
         fresh_frames += any;
     }
     prev_valid = 0;
-    if (!garbage_lines(g)) {
-        return;
-    }
     Game *before = malloc(sizeof *before);
-    PpuRowAbove built;
-    int slot_ok = 0;
     if (!before) {
         return;
     }
     memcpy(before, g, sizeof *before);
-    int has_row = build_row(g, &built, &slot_ok, 0);
+    if (g->ram[GameMode] == 4 && first_row(g) < 30 && first_row_hidden_lines(g) > 0) { /* the row shown by its lower lines at the top */
+        PpuRowAbove partial;
+        int row = first_row(g), nt_top = name_table_top(g);
+        if (build_row(g, &partial, NULL, row)) {
+            partial_frames++;
+            int pal_diff = 0;
+            for (int col = 0; col < 32; col++) {
+                int idx = (mirror_v ? nt_top << 5 : 0) | col;
+                if (!partial.have[idx]) {
+                    continue;
+                }
+                partial_tiles_equal += partial.tile[idx] == vram_tile(g, nt_top, row, col);
+                partial_tiles_different += partial.tile[idx] != vram_tile(g, nt_top, row, col);
+                partial_pal_equal += partial.pal[idx] == vram_palette(g, nt_top, row, col);
+                partial_pal_different += partial.pal[idx] != vram_palette(g, nt_top, row, col);
+                pal_diff |= partial.pal[idx] != vram_palette(g, nt_top, row, col);
+            }
+            partial_pal_frames_different += pal_diff;
+        }
+    }
+    if (first_row(g) < 30) {
+        state_changed += memcmp(before, g, sizeof *g) != 0;
+        free(before);
+        return;
+    }
+    PpuRowAbove built;
+    int slot_ok = 0;
+    int has_row = build_row(g, &built, &slot_ok, -1);
     frames_checked++;
     state_changed += memcmp(before, g, sizeof *g) != 0;
     free(before);
@@ -201,8 +263,8 @@ void large_view_check(Game *g) {
     /* The same rebuild, for the first row of the picture, which is on the screen: the video memory holds it, tiles and palettes. */
     PpuRowAbove top;
     int top_slot_ok = 0;
-    if (build_row(g, &top, &top_slot_ok, 1)) {
-        int nn = (g->ppu.t >> 10) & 3, nt_top = mirror_v ? (nn & 1) : (nn >> 1);
+    if (build_row(g, &top, &top_slot_ok, 0)) {
+        int nt_top = name_table_top(g);
         top_slot_wrong += !top_slot_ok;
         unsigned eq_before = top_tiles_equal, diff_before = top_tiles_different;
         for (int col = 0; col < 32; col++) {
@@ -211,11 +273,10 @@ void large_view_check(Game *g) {
                 top_missing++;
                 continue;
             }
-            uint8_t attr = g->ppu.vram[nt_top * 0x400 + 0x3C0 + (col >> 2)];
-            top_tiles_equal += top.tile[idx] == g->ppu.vram[nt_top * 0x400 + col];
-            top_tiles_different += top.tile[idx] != g->ppu.vram[nt_top * 0x400 + col];
-            top_pal_equal += top.pal[idx] == ((attr >> (col & 2)) & 3);
-            top_pal_different += top.pal[idx] != ((attr >> (col & 2)) & 3);
+            top_tiles_equal += top.tile[idx] == vram_tile(g, nt_top, 0, col);
+            top_tiles_different += top.tile[idx] != vram_tile(g, nt_top, 0, col);
+            top_pal_equal += top.pal[idx] == vram_palette(g, nt_top, 0, col);
+            top_pal_different += top.pal[idx] != vram_palette(g, nt_top, 0, col);
         }
         frames_top_identical += top_tiles_different == diff_before;
         frames_top_partial += top_tiles_different != diff_before && top_tiles_equal != eq_before;
@@ -229,7 +290,9 @@ void large_view_check(Game *g) {
 }
 
 void large_view_report(void) {
-    fprintf(stderr, "large view: %u frames with the lines, %u with a row above in the map (state changed by the rebuild: %u, row not in the slot above: %u)\n",
+    fprintf(stderr,
+            "large view: %u frames with the lines of the attribute table, %u with a row above in the map (state changed by a rebuild: %u, row not in the slot "
+            "above: %u)\n",
             frames_checked, frames_with_row, state_changed, slot_wrong);
     fprintf(stderr,
             "large view: first row of the picture rebuilt (it is on the screen): tiles %u identical, %u different, %u missing; palettes %u identical, %u "
@@ -239,4 +302,8 @@ void large_view_report(void) {
             frames_top_all_different);
     fprintf(stderr, "large view: the game wrote the row above in %u frames: %u tiles identical to the rebuilt ones, %u different\n", fresh_frames, fresh_equal,
             fresh_different);
+    fprintf(stderr,
+            "large view: row shown by its lower lines at the top, %u frames: tiles %u identical, %u different; palettes %u identical, %u different (in %u "
+            "frames the video memory has a palette that differs from the map's)\n",
+            partial_frames, partial_tiles_equal, partial_tiles_different, partial_pal_equal, partial_pal_different, partial_pal_frames_different);
 }
