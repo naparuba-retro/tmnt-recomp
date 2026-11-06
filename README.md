@@ -95,6 +95,10 @@ picture: with the row of the level that is really above the screen when the map 
 it, at the vertical scrolls of the buildings for instance), and with the backdrop colour (black in the sewers) when it has not (the top of the map, the
 rooms seen from the side, the title screens). It changes only what is displayed: the game's memory, the replays and the validation are the same, and the
 replay tool keeps the NES picture. About 98 % of the frames that have this band are of the second kind.
+The same rebuild (the game's row drawing on a copy, read from the PPU scroll registers) also replaces what the video memory holds out of date: the three
+first rows of the picture (the game scrolls first and draws the new row later; palettes arrive late), and the columns at the left and right edges, which the
+game draws only from 8 pixels beyond the left edge: the mask of the 8 left pixels and the column of black sprites at the right, which hide them on a TV, are
+not drawn in the large view.
 
 ### Sprite flicker
 

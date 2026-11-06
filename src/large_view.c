@@ -9,8 +9,7 @@
 #include "stage_map.h"
 
 static int enabled;
-static PpuRowAbove row_above, rows_top[3];
-static int rows_top_ty[3];
+static PpuRowAbove row_above, screen_rows[32];
 
 /* What the game's row drawing writes to the video memory of the copy: which bytes, and where the first tile goes. */
 static uint8_t written[0x800];
@@ -63,8 +62,7 @@ static int name_table_above(const Game *g) {
 /* The world position of the first row of the picture's page. The video memory holds the map in pages of 240 lines (30 rows), one name table per page,
  * alternately (B7 $DF19, split_y). The page shown at the top is the one, among those that have the name table shown there, that is the nearest to the
  * camera. Page 0 is the first of the map. */
-static unsigned page_top_y(const Game *source, unsigned camera_y, int ring_row, unsigned *page_number) {
-    int nt = name_table_top(source);
+static unsigned page_top_y(int nt, unsigned camera_y, int ring_row, unsigned *page_number) {
     unsigned best = 0, best_distance = 0xFFFFFF;
     for (unsigned page = (unsigned)nt; page < 0x80; page += 2) {
         unsigned top = page * 240 + (unsigned)(ring_row > 0 ? ring_row * 8 : 0), distance = top > camera_y ? top - camera_y : camera_y - top;
@@ -90,7 +88,8 @@ static int build_row(const Game *source, PpuRowAbove *out, int *slot_ok, int rin
     memcpy(g, source, sizeof *g);
     g->trace = NULL;
     unsigned camera_y = M(CameraYLo) | M(CameraYHi) << 8, camera_x = M(CameraXLo) | M(CameraXHi) << 8, page;
-    unsigned y = page_top_y(source, camera_y, ring_row, &page), x0 = (camera_x + 8) & 0xFFF0; /* the game's own start (scroll_camera_y, B7 $DC8B) */
+    unsigned y = page_top_y(name_table_top(source), camera_y, ring_row, &page),
+             x0 = (camera_x + 8) & 0xFFF0; /* the game's own start (scroll_camera_y, B7 $DC8B) */
     if (page == ~0u) {
         free(g);
         return 0;
@@ -124,7 +123,7 @@ static int build_row(const Game *source, PpuRowAbove *out, int *slot_ok, int rin
                     continue;
                 }
                 int idx = (mirror_v ? nt << 5 : 0) | col;
-                uint8_t attr = g->ppu.vram[nt * 0x400 + 0x3C0 + (first_slot_row >> 2) * 8 + (col >> 2)];
+                uint8_t attr = g->ram[(nt ? AttrBufferB : AttrBufferA) + (first_slot_row >> 2) * 8 + (col >> 2)];
                 out->have[idx] = 1;
                 out->tile[idx] = g->ppu.vram[i];
                 out->pal[idx] = (attr >> (((first_slot_row & 2) << 1) | (col & 2))) & 3;
@@ -150,29 +149,188 @@ static int first_row_hidden_lines(const Game *g) {
     return (g->ppu.t >> 12) & 7;
 }
 
-static uint8_t vram_tile(const Game *g, int nt, int row, int col);
+/* One pass of the game's row drawing over the rows of the picture, on a copy of the state: what each row of the map gives for the 32 columns that start at
+ * the world column `x0 / 8`, by position in these 32 (tile, palette, and the name table and column where the game puts it). */
+typedef struct {
+    int valid, slot_row;
+    uint8_t nt[32], col[32], tile[32], pal[32];
+} PassRow;
+
+/* The palettes of a row, read in the attribute buffers of the game's memory (the byte of a pair of rows is up to date once the upper row has been drawn;
+ * the video memory is not: the game sends the bytes in its own time). */
+static void read_palettes(const Game *g, PassRow *r) {
+    for (int rel = 0; rel < 32; rel++) {
+        uint8_t attr = g->ram[(r->nt[rel] ? AttrBufferB : AttrBufferA) + (r->slot_row >> 2) * 8 + (r->col[rel] >> 2)];
+        r->pal[rel] = (attr >> (((r->slot_row & 2) << 1) | (r->col[rel] & 2))) & 3;
+    }
+}
+
+/* The rows are drawn from the bottom to the top, as the game does when the camera goes up: the routine keeps state from one row to the next (the upper
+ * row of a pair completes the attributes that the lower one started). */
+static void run_pass(const Game *source, unsigned x0, const unsigned *world_y, const int *valid, int count, PassRow *out) {
+    Game *g = malloc(sizeof *g);
+    if (!g) {
+        return;
+    }
+    memcpy(g, source, sizeof *g);
+    g->trace = NULL;
+    /* The game keeps the attribute bytes in two buffers of its memory and adds the bits of each block to them: what a previous use of the video memory
+     * left there would stay (a block of water with the palette of a building). A clean buffer gives the palettes of the map. */
+    memset(&g->ram[AttrBufferA], 0, 0x40);
+    memset(&g->ram[AttrBufferB], 0, 0x40);
+    ppu_set_write_hook(on_write);
+    int started = 0;
+    for (int j = count - 1; j >= 0; j--) {
+        if (!valid[j]) {
+            continue;
+        }
+        unsigned y = world_y[j];
+        if (!started) { /* one call for nothing first */
+            started = 1;
+            draw_row(g, y, x0);
+        }
+        memset(written, 0, sizeof written);
+        slot_row = -1;
+        draw_row(g, y, x0);
+        if (slot_row < 0) {
+            continue;
+        }
+        PassRow *r = &out[j];
+        r->valid = 1;
+        r->slot_row = slot_row;
+        for (int nt = 0; nt < 2; nt++) {
+            for (int col = 0; col < 32; col++) {
+                if (!written[nt * 0x400 + slot_row * 32 + col]) {
+                    continue;
+                }
+                int rel = (col - (int)(x0 >> 3)) & 31;
+                r->nt[rel] = (uint8_t)nt;
+                r->col[rel] = (uint8_t)col;
+                r->tile[rel] = g->ppu.vram[nt * 0x400 + slot_row * 32 + col];
+            }
+        }
+        if (!(y & 8)) { /* an upper row: it sends the attribute bytes of the pair */
+            read_palettes(g, r);
+            if (j + 1 < count && valid[j + 1] && out[j + 1].valid && world_y[j + 1] == y + 8) {
+                read_palettes(g, &out[j + 1]);
+            }
+        } else if (j == 0 || !valid[j - 1] || world_y[j - 1] != y - 8) { /* a lower row whose upper row is not drawn here: draw it */
+            memset(written, 0, sizeof written);
+            draw_row(g, y - 8, x0);
+            read_palettes(g, r);
+        }
+    }
+    ppu_set_write_hook(NULL);
+    free(g);
+}
+
+/* The rows of the picture rebuilt from the map: all the columns for the 3 first rows, and the 4 columns at each edge for all of them. The game draws a row of the map from 8 pixels beyond the left edge, over 256 pixels: the column at the left and the ones at the
+ * right are not up to date in the video memory (they show tiles that wrap from the other side), which a TV hid with the mask and with black sprites. Two
+ * passes, one at a multiple of 32 pixels and one 32 pixels after, give all the world columns of the picture. */
+static void build_screen(const Game *g, PpuRowAbove *rows) {
+    memset(rows, 0, 32 * sizeof *rows);
+    unsigned camera_y = M(CameraYLo) | M(CameraYHi) << 8, camera_x = M(CameraXLo) | M(CameraXHi) << 8;
+    int mirror_v = g->ppu.mirror_v, nn = (g->ppu.t >> 10) & 3, ty = first_row(g);
+    /* The world column at the left of the picture follows the scroll registers of the PPU, which are not always where the game's camera is (they differ by a
+     * few pixels): the value of the registers, brought to the camera's turn (the name tables wrap every 256 pixels, or 512 when there are two across). */
+    int period = mirror_v ? 512 : 256;
+    int scroll_x = (mirror_v ? ((g->ppu.t >> 10) & 1) << 8 : 0) | ((g->ppu.t & 31) << 3) | (g->ppu.x & 7);
+    int turns = ((int)camera_x - scroll_x + period / 2 + 16 * period) / period - 16;
+    unsigned world_left = (unsigned)(scroll_x + turns * period);
+    int line_ty[30], valid[30], line_nt[30];
+    unsigned world_y[30];
+    int count = 0;
+    for (int j = 0; j < 30; j++, count++) { /* (the last row of the picture, partial, shares its row with the first one, in the other name table) */
+        line_ty[j] = ty;
+        line_nt[j] = mirror_v ? 0 : nn >> 1;
+        valid[j] = 0;
+        if (ty < 30) {
+            int nt = mirror_v ? (nn & 1) : (nn >> 1);
+            unsigned page, top = page_top_y(nt, camera_y + (unsigned)(8 * j), ty, &page);
+            if (page != ~0u) {
+                world_y[j] = top + (unsigned)(ty * 8);
+                valid[j] = 1;
+            }
+            if (ty == 29) {
+                ty = 0;
+                nn ^= 2;
+            } else {
+                ty++;
+            }
+        } else {
+            ty = ty == 31 ? 0 : 31;
+        }
+    }
+    static PassRow pass_a[30], pass_b[30];
+    memset(pass_a, 0, sizeof pass_a);
+    memset(pass_b, 0, sizeof pass_b);
+    unsigned x_a = world_left & 0xFFE0; /* 32 pixels: an attribute byte covers 4 columns, and the routine builds it from the blocks it draws */
+    run_pass(g, x_a, world_y, valid, count, pass_a);
+    run_pass(g, x_a + 32, world_y, valid, count, pass_b);
+    unsigned first_world_col = world_left >> 3;
+    int fine = g->ppu.x != 0;
+    for (int j = 0; j < count; j++) {
+        if (!valid[j] || line_ty[j] >= 30) {
+            continue;
+        }
+        PpuRowAbove *out = &rows[line_ty[j]];
+        out->row_nt = (uint8_t)line_nt[j];
+        for (int k = 0; k < 33; k++) {
+            if (j >= 3 && k > 3 && k < 28) {
+                continue;
+            }
+            if (k == 32 && !fine) {
+                continue;
+            }
+            if (k == 32 && !mirror_v) { /* the same ring column as the first one: kept apart */
+                int rel32 = (int)(first_world_col + 32) - (int)(x_a >> 3);
+                const PassRow *r32 = &pass_a[j];
+                if (rel32 > 31) {
+                    rel32 -= 4;
+                    r32 = &pass_b[j];
+                }
+                if (r32->valid && rel32 >= 0 && rel32 <= 31) {
+                    out->wrap_have = 1;
+                    out->wrap_tile = r32->tile[rel32];
+                    out->wrap_pal = r32->pal[rel32];
+                }
+                continue;
+            }
+            /* the first column of the map (the 8 pixels that the mask hid) is not part of the playfield: it holds other things (the edge of a building); the
+             * next one is shown instead */
+            unsigned world_col = first_world_col + (unsigned)k;
+            int rel = (int)(world_col == 0 ? 1 : world_col) - (int)(x_a >> 3);
+            const PassRow *r = &pass_a[j];
+            if (rel > 31) {
+                rel -= 4;
+                r = &pass_b[j];
+            }
+            if (!r->valid || rel < 0 || rel > 31) {
+                continue;
+            }
+            int idx = (mirror_v ? r->nt[rel] << 5 : 0) |
+                      (world_col & 31); /* (the column of the screen, which is not that of the tile read when the first column of the map is replaced) */
+            out->have[idx] = 1;
+            out->tile[idx] = r->tile[rel];
+            out->pal[idx] = r->pal[rel];
+        }
+    }
+}
 
 void large_view_prepare(Game *g) {
     if (!enabled) {
-        ppu_set_large(0, NULL, NULL, NULL, 0, 0);
+        ppu_set_large(0, NULL, NULL);
         return;
     }
     memset(&row_above, 0, sizeof row_above);
-    memset(rows_top, 0, sizeof rows_top);
-    int count = 0;
+    memset(screen_rows, 0, sizeof screen_rows);
     if (first_row(g) >= 30) { /* the lines read the attribute table: the row above, or the backdrop */
         build_row(g, &row_above, NULL, -1);
-    } else if (g->ram[GameMode] == 4) { /* in a level only: the map means nothing in the other scenes */
-        /* The first rows of the picture (the 16 first lines, which a TV hid in part) are read from the map: the video memory does not always hold them up
-         * to date. When the camera goes up, the game scrolls first and draws the new row later; and the palette of the lower row of a pair of rows is sent
-         * with the upper one, so it is stale for a while. */
-        for (int k = 0; k < 3 && first_row(g) + k < 30; k++) {
-            if (build_row(g, &rows_top[count], NULL, first_row(g) + k)) {
-                rows_top_ty[count++] = first_row(g) + k;
-            }
-        }
     }
-    ppu_set_large(1, &row_above, rows_top, rows_top_ty, count, 16);
+    if (g->ram[GameMode] == 4) { /* in a level only: the map means nothing in the other scenes */
+        build_screen(g, screen_rows);
+    }
+    ppu_set_large(1, &row_above, screen_rows);
 }
 
 /* --- tests --- */
