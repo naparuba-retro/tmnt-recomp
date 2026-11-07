@@ -227,7 +227,7 @@ static void run_pass(const Game *source, unsigned x0, const unsigned *world_y, c
 /* The rows of the picture rebuilt from the map: all the columns for the 3 first rows, and the 4 columns at each edge for all of them. The game draws a row of the map from 8 pixels beyond the left edge, over 256 pixels: the column at the left and the ones at the
  * right are not up to date in the video memory (they show tiles that wrap from the other side), which a TV hid with the mask and with black sprites. Two
  * passes, one at a multiple of 32 pixels and one 32 pixels after, give all the world columns of the picture. */
-static void build_screen(const Game *g, PpuRowAbove *rows) {
+static int build_screen(const Game *g, PpuRowAbove *rows) {
     memset(rows, 0, 32 * sizeof *rows);
     unsigned camera_y = M(CameraYLo) | M(CameraYHi) << 8, camera_x = M(CameraXLo) | M(CameraXHi) << 8;
     int mirror_v = g->ppu.mirror_v, nn = (g->ppu.t >> 10) & 3, ty = first_row(g);
@@ -268,6 +268,34 @@ static void build_screen(const Game *g, PpuRowAbove *rows) {
     run_pass(g, x_a, world_y, valid, count, pass_a);
     run_pass(g, x_a + 32, world_y, valid, count, pass_b);
     unsigned first_world_col = world_left >> 3;
+    /* Is the screen a picture of the map at all? (the pause screen, the information screens and the other scenes are in mode 4 as well, or are drawn with the
+     * same scroll): in a picture of the map the columns in the middle of the screen are exactly the ones that the map gives, which is checked here. Where they
+     * are not, nothing is replaced. */
+    int same = 0, different = 0;
+    for (int j = 0; j < count; j++) {
+        if (!valid[j] || line_ty[j] >= 30) {
+            continue;
+        }
+        for (int k = 8; k < 24; k++) {
+            int rel = (int)(first_world_col + (unsigned)k) - (int)(x_a >> 3);
+            const PassRow *r = &pass_a[j];
+            if (rel > 31) {
+                rel -= 4;
+                r = &pass_b[j];
+            }
+            if (!r->valid || rel < 0 || rel > 31) {
+                continue;
+            }
+            if (g->ppu.vram[r->nt[rel] * 0x400 + line_ty[j] * 32 + r->col[rel]] == r->tile[rel]) {
+                same++;
+            } else {
+                different++;
+            }
+        }
+    }
+    if (same + different == 0 || different * 4 > same + different) {
+        return 0;
+    }
     int fine = g->ppu.x != 0;
     for (int j = 0; j < count; j++) {
         if (!valid[j] || line_ty[j] >= 30) {
@@ -315,21 +343,29 @@ static void build_screen(const Game *g, PpuRowAbove *rows) {
             out->pal[idx] = r->pal[rel];
         }
     }
+    return 1;
 }
 
 void large_view_prepare(Game *g) {
+    /* The pause screen only redraws the middle of the screen: its 2 first rows show what the video memory holds there (tiles and sprites of the scene that was
+     * left), which a TV hid. The port's video memory is the original's (same name tables as BizHawk on the TAS): in the large view these lines show the
+     * backdrop instead; without it, they are left as they are. */
+    ppu_set_large_blank_top(enabled && g->ram[GameMode] == 4 && g->ram[PauseFlag] ? 16 : 0);
     if (!enabled) {
         ppu_set_large(0, NULL, NULL);
+        ppu_set_large_edges(0);
         return;
     }
     memset(&row_above, 0, sizeof row_above);
     memset(screen_rows, 0, sizeof screen_rows);
+    int edges = 0;            /* the screen is a picture of the map: its edges are shown (the mask of the 8 left pixels and the black sprites are not drawn) */
     if (first_row(g) >= 30) { /* the lines read the attribute table: the row above, or the backdrop */
         build_row(g, &row_above, NULL, -1);
     }
     if (g->ram[GameMode] == 4) { /* in a level only: the map means nothing in the other scenes */
-        build_screen(g, screen_rows);
+        edges = build_screen(g, screen_rows);
     }
+    ppu_set_large_edges(edges);
     ppu_set_large(1, &row_above, screen_rows);
 }
 

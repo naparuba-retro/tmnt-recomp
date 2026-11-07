@@ -25,6 +25,10 @@ typedef struct {
  * first rows of the picture (the game scrolls first and draws the new row later, and the palette of the lower row of a pair arrives with the upper one),
  * and the columns at the left and right edges (the game draws the map only from 8 pixels beyond the left edge, the black sprites and the mask hide the
  * rest). */
+/* The first `lines` lines show only the backdrop colour, sprites included. Set by large_view_prepare() when the large view is on. */
+void ppu_set_large_blank_top(int lines);
+/* The screen is a picture of the map (large view): its left and right edges are shown. */
+void ppu_set_large_edges(int on);
 void ppu_set_large(int on, const PpuRowAbove *row_above, const PpuRowAbove *rows);
 
 /* Called for every write of a tile or an attribute to the name tables: the address ($2000-$2FFF), the index in the 2 KB of video memory, the value. */

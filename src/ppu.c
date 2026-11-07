@@ -10,12 +10,22 @@ static int large_on;                 /* large view (key L): see ppu_set_large() 
 static const PpuRowAbove *large_row; /* the row above the picture, or NULL when there is none */
 static PpuWriteHook write_hook;      /* sees the writes to the name tables (the large view runs the game's row drawing on a copy) */
 
+static int large_edges;     /* the screen is a picture of the map: the mask of the 8 left pixels and the black sprites of the right edge are not drawn */
+static int large_blank_top; /* lines at the top that show only the backdrop (the pause screen, see large_view.c) */
 static const PpuRowAbove *large_rows; /* the rows of the picture rebuilt from the map, by row of the name table (32 entries) */
 
 void ppu_set_large(int on, const PpuRowAbove *row_above, const PpuRowAbove *rows) {
     large_on = on;
     large_row = row_above;
     large_rows = rows;
+}
+
+void ppu_set_large_edges(int on) {
+    large_edges = on;
+}
+
+void ppu_set_large_blank_top(int lines) {
+    large_blank_top = lines;
 }
 
 void ppu_set_write_hook(PpuWriteHook hook) {
@@ -122,7 +132,7 @@ static void draw_background(Game *g, uint8_t *out, uint8_t *bg_c, int pass_from,
     }
     for (int y = pass_from; y < 240; y++) {
         uint8_t *bg_row = &bg_c[y * 256], *out_row = &out[y * 256];
-        if (!show_bg) {
+        if (!show_bg || y < large_blank_top) {
             memset(bg_row, 0, 256);
             continue;
         }
@@ -140,7 +150,7 @@ static void draw_background(Game *g, uint8_t *out, uint8_t *bg_c, int pass_from,
             if (len > 256 - x) {
                 len = 256 - x;
             }
-            if (x < 8 && !(p->mask & 2) && !large_on) { /* the 8 leftmost pixels are hidden (not in the large view) */
+            if (x < 8 && !(p->mask & 2) && !(large_on && large_edges)) { /* the 8 leftmost pixels are hidden (not in the large view) */
                 if (len > 8 - x) {
                     len = 8 - x;
                 }
@@ -239,6 +249,9 @@ static void draw_sprites(Game *g, uint8_t *out, const uint8_t *bg_c) {
     Ppu *p = &g->ppu;
     int tall = (p->ctrl & 0x20) != 0, h = tall ? 16 : 8;
     for (int y = 0; y < 240; y++) {
+        if (y < large_blank_top) {
+            continue; /* no sprite on the lines that show only the backdrop */
+        }
         int count = 0;
         uint8_t done[256];
         memset(done, 0, sizeof done);
@@ -252,7 +265,7 @@ static void draw_sprites(Game *g, uint8_t *out, const uint8_t *bg_c) {
             }
             uint8_t tile = p->oam[s * 4 + 1], attr = p->oam[s * 4 + 2];
             int sx = p->oam[s * 4 + 3];
-            if (large_on && sx == 248 && tile == 0x0F) {
+            if (large_on && large_edges && sx == 248 && tile == 0x0F) {
                 continue; /* the column of black sprites that hides the right edge of the picture (it counted for the 8 per line) */
             }
             if (attr & 0x80) {
@@ -270,7 +283,7 @@ static void draw_sprites(Game *g, uint8_t *out, const uint8_t *bg_c) {
             uint8_t lo = chr_byte(g, hi_table, a), hb = chr_byte(g, hi_table, (uint16_t)(a + 8));
             for (int i = 0; i < 8; i++) {
                 int x = sx + i;
-                if (x > 255 || done[x] || (x < 8 && !(p->mask & 4) && !large_on)) {
+                if (x > 255 || done[x] || (x < 8 && !(p->mask & 4) && !(large_on && large_edges))) {
                     continue;
                 }
                 int bit = (attr & 0x40) ? i : 7 - i;
