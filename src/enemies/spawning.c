@@ -5,6 +5,7 @@
 #include "hal.h"
 #include "player.h"
 #include "stage.h"
+#include "spawn_mask.h"
 #include "stage_play.h"
 #define TODO_AREA "enemy" /* prefix of the TODO traces of this file */
 
@@ -126,6 +127,14 @@ static int spawn_at(Game *g, uint8_t y0, int mode) /* mode 0: normal, 2: $82C9 (
 {
     uint8_t y = (uint8_t)(y0 + 2);
     uint8_t code = rdmem(g, (uint16_t)(ptr(g, SpawnListPtrLo) + y));
+    if (mode != 2 && spawn_mask_active() && code < 0xF0 && spawn_masked((uint16_t)(ptr(g, SpawnListPtrLo) + y0), M(WaveSpriteSet))) {
+        /* Whole Pizza, spawn mask: this spawn is cut. After the wave logic of spawn_enemy (which ran as before), before anything is created. The bosses
+         * ($70-$7F once the table of the sprite set is read) are never cut. */
+        uint8_t type = code < 0x10 ? code : rdmem(g, (uint16_t)(rom_word(g->rom, 6, (uint16_t)(0x86E9 + M(WaveSpriteSet) * 2)) + (code & 7)));
+        if ((type & 0xF0) != 0x70) {
+            return SPAWN_SKIPPED;
+        }
+    }
     uint8_t x = mode == 1 ? 0x0E : 5; /* B7 $EEF2 FindFreeEntitySlot: entities 5 to 10 ($EEE0: 14 and 15) */
     uint8_t end = mode == 1 ? 0x10 : 0x0B;
     while (M(EntType + x)) {
@@ -183,6 +192,10 @@ void spawn_initial_side(Game *g) {
             }
             if (pass == 0 ? c >= M(SpawnLimitX) : c < M(SpawnLimitX)) {
                 int free_slot = spawn_enemy(g, M(SavedY));
+                if (free_slot == SPAWN_SKIPPED) { /* cut by the spawn mask: the next entry */
+                    M(SavedY) = (uint8_t)(M(SavedY) + 3);
+                    continue;
+                }
                 if (free_slot < 0) {
                     if (pass == 0) {
                         break;

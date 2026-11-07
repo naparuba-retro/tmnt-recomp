@@ -12,6 +12,7 @@
 #include "nmi.h"
 #include "platform.h"
 #include "ppu.h"
+#include "spawn_mask.h"
 
 #define TITLE "TMNT (Europe) - port C"
 
@@ -471,9 +472,9 @@ static void run_game_frame(Game *g, int audio) {
     if ((int)g->frame / 60 != last_title_frame && g->frame % 60 == 0) {
         char t[160];
         last_title_frame = (int)g->frame / 60;
-        snprintf(t, sizeof t, "TMNT (Europe) - port C | mode %d.%d%s%s%s%s%s%s%s", g->ram[GameMode], g->ram[GameSubMode], muted ? " | muted" : "",
+        snprintf(t, sizeof t, "TMNT (Europe) - port C | mode %d.%d%s%s%s%s%s%s%s%s", g->ram[GameMode], g->ram[GameSubMode], muted ? " | muted" : "",
                  audio ? "" : " | no sound card", fix_any_enabled() ? " | FIXES ON (J)" : "", fix_water_enabled() ? " | WATER FIXES (E)" : "",
-                 fix_camera_enabled() ? " | CAMERA FIX (C)" : "", ppu_sprite_limit() > 8 ? " | NO FLICKER (F)" : "",
+                 fix_camera_enabled() ? " | CAMERA FIX (C)" : "", spawn_mask_active() ? " | SPAWN MASK" : "", ppu_sprite_limit() > 8 ? " | NO FLICKER (F)" : "",
                  large_view_enabled() ? " | LARGE VIEW (L)" : "");
         platform_set_title(t);
     }
@@ -486,6 +487,11 @@ int main(int argc, char **argv) {
     }
     reset_game(g);
     parse_options(argc, argv);
+    for (int i = 1; i + 1 < argc; i++) {
+        if (!strcmp(argv[i], "--spawn-mask")) {
+            spawn_mask_load(argv[i + 1], g->rom);
+        }
+    }
     open_logs(g);
     for (int i = 1; i + 2 < argc; i++) {
         if (!strcmp(argv[i], "--dump")) {

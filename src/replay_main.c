@@ -31,6 +31,7 @@
 #include "player/scroll.h"
 #include "fixes.h"
 #include "enemy.h"
+#include "spawn_mask.h"
 #include "nmi.h"
 #include "sound.h"
 #include "stage_play.h"
@@ -821,6 +822,9 @@ int main(int argc, char **argv) {
     }
     if (getenv("TMNT_FIXES")) { /* tests only: the fixes of FIXES.md on (they are off otherwise, and then the replays are the original's) */
         fix_set_all(1);
+    }
+    if (getenv("TMNT_SPAWN_MASK")) { /* tests only: the spawn mask file (tools/spawn_mask_check.sh) */
+        spawn_mask_load(getenv("TMNT_SPAWN_MASK"), g->rom);
     }
     if (getenv("TMNT_HITBOX")) { /* fills the hit box journal (tests: the game must not change, and the formula must match the game's boxes) */
         hitbox_set_enabled(1);

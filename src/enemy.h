@@ -7,7 +7,7 @@
 typedef struct Game Game;
 
 void boss74_picture(Game *g, uint8_t n);         /* B5 $B170 (called by B7 $D075) */
-int spawn_enemy(Game *g, uint8_t list_pos);      /* returns the created entity or -1 */
+int spawn_enemy(Game *g, uint8_t list_pos);      /* returns the created entity, -1 (no room) or SPAWN_SKIPPED (spawn_mask.h: cut by the spawn mask) */
 void spawn_initial_side(Game *g);                /* B6 $85CC */
 void clamp_entity_position(Game *g, int x);      /* B5 $8077 */
 void enemy_update_all(Game *g);                  /* B5 $8001 */
