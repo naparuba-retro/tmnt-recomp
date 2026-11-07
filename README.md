@@ -73,13 +73,14 @@ tells you where to put the file. The ROM can also be given as an argument: `tmnt
 | H | show / hide the hit boxes (see below) |
 | J | switch the fixes on / off (see `FIXES.md`) |
 | E | switch the water fixes (dam level) on / off (see `FIXES.md`) |
+| C | switch the camera fix on / off: the camera catches up with the turtle (see `FIXES.md`) |
 | F | remove the sprite flicker (see below) |
 | L | large view: no random tiles at the top of the screen (see below) |
 | Esc | quit |
 
 The first game controller found works too: d-pad or left stick, A = jump, X or B = attack, Start, Back = Select, left trigger = rewind.
 
-Options: `--level2` ... `--level6` start directly in a level, `--invincible`, `--hitbox` (hit boxes shown from the start), `--fixes` (the fixes of `FIXES.md` on from the start), `--water-fixes` (the water ones), `--no-flicker` (no sprite flicker from the start), `--large` (large view from the start), `--input file` (plays the pad
+Options: `--level2` ... `--level6` start directly in a level, `--invincible`, `--hitbox` (hit boxes shown from the start), `--fixes` (the fixes of `FIXES.md` on from the start), `--water-fixes` (the water ones), `--camera-fix` (the camera one), `--no-flicker` (no sprite flicker from the start), `--large` (large view from the start), `--input file` (plays the pad
 from a file of `first last mask` ranges instead of the keyboard), `--dump N name` (windowless: writes `name.bmp` and `name.wav` after N frames).
 
 ### Fixes

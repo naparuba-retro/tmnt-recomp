@@ -28,6 +28,7 @@
 #include "platform.h"
 #include "hitbox_view.h"
 #include "large_view.h"
+#include "player/scroll.h"
 #include "fixes.h"
 #include "enemy.h"
 #include "nmi.h"
@@ -453,7 +454,16 @@ static void audio_finish(void) {
     }
 }
 
-static int check_large; /* TMNT_LARGE=1 */
+static int check_large;  /* TMNT_LARGE=1 */
+static int check_camera; /* TMNT_CAMERA=1: counts the frames where the camera has not caught up with the turtle (player/scroll.c) */
+static unsigned camera_frames[3], camera_run, camera_longest, camera_longest_end;
+
+static void camera_report(void) {
+    fprintf(stderr,
+            "camera: %u frames with the turtle far to the left of the screen (it could scroll left), %u far to the right; longest run %u frames, ending at "
+            "frame %u\n",
+            camera_frames[1], camera_frames[2], camera_longest, camera_longest_end);
+}
 
 static void run_frame(Replay *r) {
     Game *g = r->g;
@@ -464,6 +474,15 @@ static void run_frame(Replay *r) {
     apply_inputs(r);
     apply_random_seed(r);
     nmi_frame(g);
+    if (check_camera) {
+        int far = camera_far_from_player(g);
+        camera_frames[far]++;
+        camera_run = far ? camera_run + 1 : 0;
+        if (camera_run > camera_longest) {
+            camera_longest = camera_run;
+            camera_longest_end = g->frame;
+        }
+    }
     if (check_large) { /* tests only: rebuilds the row above the picture at every frame where it is needed and checks it (see large_view.h) */
         large_view_check(g);
     }
@@ -610,9 +629,16 @@ int main(int argc, char **argv) {
         return 0;
     }
 #endif
+    if (getenv("TMNT_CAMERA")) {
+        check_camera = 1;
+        atexit(camera_report);
+    }
     if (getenv("TMNT_LARGE")) {
         check_large = 1;
         atexit(large_view_report);
+    }
+    if (getenv("TMNT_CAMERA_FIX")) { /* tests only: the camera fix on (tools/camera_check.sh) */
+        fix_set_camera(1);
     }
     if (getenv("TMNT_WATER_FIXES")) { /* tests only: the fixes of the water level on */
         fix_set_water(1);

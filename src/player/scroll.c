@@ -1,4 +1,7 @@
 /* Scrolling triggered by the player and vertical screen changes (pits). */
+#include <stdlib.h>
+#include <string.h>
+#include "fixes.h"
 #include "game.h"
 #include "enemy.h"
 #include "hal.h"
@@ -52,8 +55,53 @@ static void scroll_speed_limit(Game *g) /* B4 $9BBF: scroll speed ($C0/$C1) */
     M(CameraSpeedXFrac) = M(EntVelXFrac);
 }
 
+/* Whether the screen can scroll to the left (or to the right) with the turtle's speed as it is now (the tests of $9851 without the position of the turtle). */
+static int camera_scroll_possible(Game *g, int left) {
+    M(Tmp10) = camera_next_hi(g, left ? 0xFF : 1);
+    int possible = left ? !((M(Tmp10) & 0x80) && !M(CameraXLo)) : M(Tmp10) < rdmem(g, ptr(g, 0x49));
+    return possible && next_screen_column(g) != 0xFF && !M(WaveState);
+}
+
+/* PIZZA-004: the scroll of the original follows the turtle only once it is past $60 (left) or $A0 (right), and then at the speed of the turtle, so a turtle that
+ * has got far to one side while the camera was held (a mid-boss, a wave) stays there. Here the camera is moved 2 pixels per frame more than the turtle does,
+ * towards the turtle, until it is back at $58 (or $A8), and the turtle is moved on the screen by what the camera has moved (camera_recentre_finish). */
+static int recentre_pending;
+
+static int camera_recentre(Game *g) {
+    uint8_t x = M(EntX);
+    int left = x < 0x58, right = x > 0xA8;
+    if ((!left && !right) || x < 8 || x > 0xF8 || M(PauseFlag) || !camera_scroll_possible(g, left)) {
+        return 0;
+    }
+    int own = (int8_t)M(EntVelX); /* the turtle's own speed, applied after the scroll */
+    int speed = left ? (own < 0 ? own : 0) - 2 : (own > 0 ? own : 0) + 2;
+    if (speed < -6) {
+        speed = -6;
+    }
+    if (speed > 6) {
+        speed = 6;
+    }
+    M(CameraSpeedX) = (uint8_t)speed;
+    M(CameraSpeedXFrac) = 0;
+    M(ScrollDirX) = left ? 1 : 2;
+    recentre_pending = 1;
+    return 1;
+}
+
+void camera_recentre_finish(Game *g) {
+    if (!recentre_pending) {
+        return;
+    }
+    recentre_pending = 0;
+    move_entity_x(g, 0); /* the turtle's own movement, which the scroll of the original replaces */
+    M(EntX) = (uint8_t)(M(EntX) - M(CameraDeltaX));
+}
+
 void player_scroll_trigger(Game *g) /* B4 $9851 */
 {
+    if (fix_enabled(FIX_CAMERA_FOLLOW) && camera_recentre(g)) {
+        return;
+    }
     if (!(M(EntVelX) | M(EntVelXFrac))) {
         return;
     }
@@ -84,6 +132,40 @@ void player_scroll_trigger(Game *g) /* B4 $9851 */
         scroll_speed_limit(g);
         M(ScrollDirX) = 2;
     }
+}
+
+/* The scroll follows the turtle only once it is past $60 (to the left) or $A0 (to the right), and then at the speed of the turtle: it never catches up. When
+ * the turtle has walked far into one side while the camera was held (a wave of enemies, a mid-boss), the turtle stays there and the view ahead is nearly
+ * empty. This tells whether that is the case now: 1 = far to the left although the screen could scroll to the left, 2 = far to the right although it could
+ * scroll to the right, 0 = no. (Test only: it works on a copy of the state.) */
+int camera_far_from_player(const Game *source) {
+    if (source->ram[GameMode] != 4 || !source->ram[SideViewFlag] || source->ram[WaveState] || source->ram[PauseFlag]) {
+        return 0;
+    }
+    int result = 0;
+    uint8_t x = source->ram[EntX];
+    if (x < 8 || x > 0xF8) { /* the turtle is not on the screen (a rope, a transition) */
+        return 0;
+    }
+    for (int left = 0; left < 2; left++) {
+        if (left ? x >= CAMERA_FAR_LEFT : x <= CAMERA_FAR_RIGHT) {
+            continue;
+        }
+        Game *g = malloc(sizeof *g);
+        if (!g) {
+            return 0;
+        }
+        memcpy(g, source, sizeof *g);
+        g->trace = NULL;
+        M(EntVelX) = left ? 0xFC : 4; /* as if the turtle walked that way */
+        M(EntVelXFrac) = 0;
+        int possible = camera_scroll_possible(g, left);
+        free(g);
+        if (possible) {
+            result = left ? 1 : 2;
+        }
+    }
+    return result;
 }
 
 /* --- vertical screen change in side view (ladder at the top or bottom of the screen): B4 $9A73-$9B13 --- */

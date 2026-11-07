@@ -24,6 +24,7 @@ typedef struct {
     int hitbox;     /* H */
     int fix;        /* J */
     int water;      /* E */
+    int camera;     /* C */
     int flicker;    /* F */
     int large;      /* L */
     int restart;    /* F5 */

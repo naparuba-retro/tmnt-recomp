@@ -8,13 +8,15 @@ How to switch them on, for tests and demonstrations:
 
 - in the game, the **J** key switches the fixes on or off (the window title shows `FIXES ON`), or start with `--fixes`;
 - the fixes of the water level (dam) are a group of their own: the **E** key (title: `WATER FIXES`), or `--water-fixes`; J does not touch them;
-- in the replay tool, the environment variable `TMNT_FIXES=1` (all of them; `TMNT_FIXES=1 bash tools/verify_all.sh` shows where the replays leave the original's) or `TMNT_WATER_FIXES=1` (the water ones only).
+- the fix of the camera is a third group: the **C** key (title: `CAMERA FIX`), or `--camera-fix`;
+- in the replay tool, the environment variable `TMNT_FIXES=1` (all of them; `TMNT_FIXES=1 bash tools/verify_all.sh` shows where the replays leave the original's) `TMNT_WATER_FIXES=1` (the water ones only) or `TMNT_CAMERA_FIX=1` (the camera one).
 
 | Id | Fix | Evidence | Effect on the TAS |
 |---|---|---|---|
 | PIZZA-001 | Hitting a ceiling in a jump no longer stops the horizontal speed of the turtle | the code, and the original game itself (BizHawk) | the TAS leaves the original's at image 3921 |
 | PIZZA-002 (water, key E) | The current of the water no longer leaves a speed that pushes the swimming turtle for ever | the code, the TAS (BizHawk), and Upsilandre's blog | the TAS leaves the original's at image 10854 |
 | PIZZA-003 (water, key E) | The rotating bar of the dam has a box that matches its sprite | the code, a measure in the TAS, and Upsilandre's blog | none by itself (the TAS already leaves the original's at 10854) |
+| PIZZA-004 (camera, key C) | The camera catches up with a turtle that is far to one side of the screen | the code, and a recorded game (`sessions/camera_midboss`) | none (the TAS never gets there with the fix off; the fix is off in the replays) |
 
 ## PIZZA-001: a ceiling no longer stops the turtle's horizontal speed
 
@@ -120,3 +122,29 @@ smaller than the sprite. It is centred on Y for the ring; the discs are drawn in
 of the TAS).
 
 **Intention assumed.** The Y of these elements is their centre (their sprites are centred on it), and no box was meant to hang 8 pixels above them.
+
+## PIZZA-004: the camera catches up with the turtle (camera group, key C)
+
+**Problem.** After a mid-boss of a sewer (side view) has been killed and the screen is released, the camera does not come back to the turtle: if the turtle has
+gone far to one side while the screen was held, it stays there, the camera only follows at the turtle's pace, and the view ahead is nearly empty.
+
+**Cause (B4 `$9851`-`$98A0`, `src/player/scroll.c`).** In side view the screen scrolls only when the turtle walks: to the left once it is below `$60`, to the right once it
+is above `$A0`, and then at the speed of the turtle (4 pixels per frame at most): the camera keeps the distance, it never reduces it. While a wave or a mid-boss
+holds the screen (`$5E` is not 0) there is no scroll at all, so the turtle can walk anywhere in the screen; once released, nothing brings it back, and a turtle that
+stands still never makes the screen move.
+
+**Fix.** When the turtle is below `$58` (or above `$A8`), the screen could scroll that way, and the camera is not held, the camera is moved 2 pixels per frame more than
+the turtle walks, towards it, and the turtle is moved on the screen by what the camera has moved: it comes back to `$58` (or `$A8`) in a few frames, standing still or
+walking. Nothing changes when the flag is off, nor between `$58` and `$A8`.
+
+**Intention assumed.** A camera that follows the turtle is meant to show what is ahead; the stuck view is a consequence of the speed-only follow, not a rule.
+
+**Evidence.** `bash tools/camera_check.sh` replays the recorded game `sessions/camera_midboss` (sewer of level 1, mid-boss killed, then the turtle stands at the left of
+the screen) and counts the frames where the turtle is below `$40` (or above `$C0`) although the screen could scroll that way (`camera_far_from_player()`):
+
+| Replay | Frames in the longest run | Total |
+|---|---|---|
+| fix off (the original) | 9485 (until the end of the record, frame 14120) | 9485 |
+| fix on (`TMNT_CAMERA_FIX=1`) | 35 (the turtle is brought back, frame 4670) | 35 |
+
+In the reference game (EU, played by a person) the longest run is 155 frames with the fix off.

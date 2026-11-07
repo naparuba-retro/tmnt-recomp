@@ -10,6 +10,7 @@
 #include "stage_map.h"
 #include "stage_scroll.h"
 #include "stage_play.h"
+#include "player/scroll.h"
 #include "stage_play/camera_split.h"
 #include "stage_play/collisions.h"
 #include "stage_play/objects.h"
@@ -117,6 +118,7 @@ void stage_play(Game *g) /* B7 $CC35 */
         if (!M(VerticalScrollMode)) { /* CallScrollCameraX : ScrollCameraX ($D7D6) */
             set_prg_saved(g, 1);
             scroll_camera_x(g);
+            camera_recentre_finish(g); /* PIZZA-004 (off by default) */
         }
         set_prg_saved(g, 1); /* CallScrollCameraY : ScrollCameraY ($DC8B) */
         scroll_camera_y(g);
