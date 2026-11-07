@@ -10,6 +10,7 @@ How to switch them on, for tests and demonstrations:
 - the fixes of the water level (dam) are a group of their own: the **E** key (title: `WATER FIXES`), or `--water-fixes`; J does not touch them;
 - the fix of the camera is a third group: the **C** key (title: `CAMERA FIX`), or `--camera-fix`;
 - the **spawn mask** (PIZZA-005) is loaded at start from `data/spawn_mask.txt` (an absent file is an empty mask): the **S** key switches it on or off (title: `SPAWN MASK (S)`), or start with `--spawn-mask` (on from the start; with a file name, that file instead of the shipped one), or `TMNT_SPAWN_MASK=<file>` in the replay tool;
+- the balance options (PIZZA-006 and PIZZA-007) are a fourth group: the **R** key (title: `BALANCE (R)`), or `--balance`, or `TMNT_BALANCE=1` in the replay tool;
 - in the replay tool, the environment variable `TMNT_FIXES=1` (all of them; `TMNT_FIXES=1 bash tools/verify_all.sh` shows where the replays leave the original's) `TMNT_WATER_FIXES=1` (the water ones only) or `TMNT_CAMERA_FIX=1` (the camera one).
 
 | Id | Fix | Evidence | Effect on the TAS |
@@ -19,6 +20,8 @@ How to switch them on, for tests and demonstrations:
 | PIZZA-003 (water, key E) | The rotating bar of the dam has a box that matches its sprite | the code, a measure in the TAS, and Upsilandre's blog | none by itself (the TAS already leaves the original's at 10854) |
 | PIZZA-004 (camera, key C) | The camera catches up with a turtle that is far to one side of the screen | the code, and a recorded game (`sessions/camera_midboss`) | none (the TAS never gets there with the fix off; the fix is off in the replays) |
 | PIZZA-005 (spawn mask, key S) | Enemy spawns listed in a file written by the spawn editor (`spawn_editor/`) are not created, one by one and per sprite set; the bosses never | the editor and `sessions/spawn_mask` (`bash tools/spawn_mask_check.sh`) | none (the option is off in the replays; with an empty or wrong mask the RAM is identical to the original's on 1916 frames) |
+| PIZZA-006 (balance, key R) | The damage of a normal attack is raised for Leonardo (7 to 14), Raphael (9 to 20) and Michelangelo (7 to 14); Donatello stays at 15 | the damage table of the game (bank 6 `$9BCB`) and a measure on the four turtles (`bash tools/balance_check.sh`) | none (the option is off in the replays) |
+| PIZZA-007 (balance, key R) | The hit box of Raphael's sai is 7 pixels wider each side: 35 pixels of reach in front of him instead of 28 | the hit box tables of the game (bank 6 `$8935`, `$8A43`) and a measure with dummy enemies (`bash tools/balance_check.sh`) | none (off in the replays) |
 
 ## PIZZA-001: a ceiling no longer stops the turtle's horizontal speed
 
@@ -165,3 +168,29 @@ bosses (types `$70`-`$7F`) are never cut. `spawn_initial_side` goes on to the ne
 **Delivery.** `port/data/spawn_mask.txt` is the mask of the Whole Pizza edition: the folder `data/` goes with the executable (like `rom/`). The spawn editor (`tools/spawn_editor/`, `python run.py`) writes it, with its source `data/spawn_mask.json`, at each save.
 
 **Effect.** Off by default (key S or `--spawn-mask` to switch it on) and off in the replays. Switching it on only acts on the spawns to come: an enemy already on the screen stays and in `tools/verify_all.sh`. A wave whose enemies are all cut ends at once (tested on the three waves of level 1).
+
+## PIZZA-006: the damage of the normal attacks (balance group, key R)
+
+**Problem.** The four turtles do not hit alike: a normal attack does 7 (Leonardo), 9 (Raphael), 7 (Michelangelo) or 15 (Donatello) damage, read in the table at bank 6
+`$9BCB` (two bytes per turtle: normal, and a little more when the turtle's health is below half). Donatello kills most enemies in half the hits, the others in
+about twice as many, and the jump attack (240 for all) is far above any of them.
+
+**Fix.** `enemy_hit_by_weapon` (`src/enemies/contact.c`) reads 14 / 17 (Leonardo), 20 / 20 (Raphael), 14 / 19 (Michelangelo) and the original 15 / 16 (Donatello); the second
+value is the one at low health, with the bonus of the original (+3, 0, +5, +1). The jump attack, the sub-weapons and the special weapons are not changed.
+
+**Intention assumed.** This one is a balance choice, not a correction: it is a suggestion of the project (the author), which is why it is in a group of its own.
+
+**Evidence.** `bash tools/balance_check.sh` hits a dummy enemy with each turtle and measures 7 / 9 / 7 / 15 without the option and 14 / 20 / 14 / 15 with it.
+
+## PIZZA-007: Raphael's reach (balance group, key R)
+
+**Problem.** Raphael's sai reaches 28 pixels in front of him (the right side of its hit box, 5 pixels from its centre, at the best frame of the thrust), against 39 to 54
+for the others. Its box is 11 by 17 pixels.
+
+**Cause.** The half width of the weapon box comes from the entry 9 of the hit box table (bank 6 `$8A43`), shared by the three attacks of Raphael (animations `$A5`, `$A6`, `$A7`:
+up, straight, down).
+
+**Fix.** The box is computed with a half width of 12 instead of 5 for these three animations when Raphael is the turtle (`entity_hitbox_raw`, `src/stage_play/collisions.c`, and the hit
+box view, `src/hitbox_view.c`): 35 pixels of reach straight (28 up, 35 down instead of 21 and 28), a box of 25 by 17 pixels, which also reaches 7 pixels more behind him.
+
+**Evidence.** `bash tools/balance_check.sh`: the farthest dummy enemy that is hit is at 31 pixels without the option and 38 with it; the hit box view stays equal to the game's formula.

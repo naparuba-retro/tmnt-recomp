@@ -19,6 +19,9 @@ static void entity_hitbox_raw(Game *g, int x, uint8_t yi) /* B6 $9B11 GetEntityH
     uint8_t i2 = (uint8_t)(a << 1);
     M(Tmp0 + 2) = yi;
     M(Tmp0) = R6(0x8A43 + i2);
+    if (fix_enabled(FIX_RAPH_REACH) && x > 0 && x < 5 && M(CurrentTurtle) == 1 && id >= 0xA5 && id <= 0xA7 && M(EntType + x) < 0x80) {
+        M(Tmp0) = (uint8_t)(M(Tmp0) + 7); /* PIZZA-007: Raphael's sai ($A5-$A7): 7 pixels wider each side, 35 pixels of reach in front of him */
+    }
     M(Tmp0 + 1) = R6(0x8A44 + i2);
     M(Tmp8 + yi) = (uint8_t)(M(EntX + x) - M(Tmp0));
     M(Tmp9 + yi) = (uint8_t)(M(EntX + x) + M(Tmp0));

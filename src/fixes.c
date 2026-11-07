@@ -61,6 +61,31 @@ void fix_toggle_camera(void) {
     fix_set_camera(!fix_camera_enabled());
 }
 
+int fix_is_balance(FixId id) {
+    return id == FIX_BALANCE_DAMAGE || id == FIX_RAPH_REACH;
+}
+
+void fix_set_balance(int on) {
+    for (int i = 0; i < FIX_COUNT; i++) {
+        if (fix_is_balance((FixId)i)) {
+            enabled[i] = on != 0;
+        }
+    }
+}
+
+int fix_balance_enabled(void) {
+    for (int i = 0; i < FIX_COUNT; i++) {
+        if (fix_is_balance((FixId)i) && enabled[i]) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+void fix_toggle_balance(void) {
+    fix_set_balance(!fix_balance_enabled());
+}
+
 void fix_set_all(int on) {
     for (int i = 0; i < FIX_COUNT; i++) {
         enabled[i] = on != 0;
@@ -69,7 +94,7 @@ void fix_set_all(int on) {
 
 int fix_any_enabled(void) {
     for (int i = 0; i < FIX_COUNT; i++) {
-        if (enabled[i] && !fix_is_water((FixId)i) && !fix_is_camera((FixId)i)) {
+        if (enabled[i] && !fix_is_water((FixId)i) && !fix_is_camera((FixId)i) && !fix_is_balance((FixId)i)) {
             return 1;
         }
     }
@@ -79,7 +104,7 @@ int fix_any_enabled(void) {
 void fix_toggle_all(void) {
     int on = !fix_any_enabled();
     for (int i = 0; i < FIX_COUNT; i++) {
-        if (!fix_is_water((FixId)i) && !fix_is_camera((FixId)i)) {
+        if (!fix_is_water((FixId)i) && !fix_is_camera((FixId)i) && !fix_is_balance((FixId)i)) {
             enabled[i] = on;
         }
     }

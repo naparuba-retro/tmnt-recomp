@@ -81,6 +81,9 @@ static void entity_rect(Game *g, int x, uint8_t rect[4]) {
         a = (id & 0x80) ? R6(0x895B + id) : R6(0x89B5 + id);
     }
     uint8_t i2 = (uint8_t)(a << 1), w = R6(0x8A43 + i2), h = R6(0x8A44 + i2);
+    if (fix_enabled(FIX_RAPH_REACH) && x > 0 && x < 5 && M(CurrentTurtle) == 1 && id >= 0xA5 && id <= 0xA7 && M(EntType + x) < 0x80) {
+        w = (uint8_t)(w + 7); /* PIZZA-007 (see collisions.c) */
+    }
     rect[0] = (uint8_t)(M(EntX + x) - w);
     rect[1] = (uint8_t)(M(EntX + x) + w);
     if (x < 5) {

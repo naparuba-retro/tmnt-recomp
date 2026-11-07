@@ -817,6 +817,9 @@ int main(int argc, char **argv) {
     if (getenv("TMNT_CAMERA_FIX")) { /* tests only: the camera fix on (tools/camera_check.sh) */
         fix_set_camera(1);
     }
+    if (getenv("TMNT_BALANCE")) { /* tests only: the balance options on (tools/balance_check.sh) */
+        fix_set_balance(1);
+    }
     if (getenv("TMNT_WATER_FIXES")) { /* tests only: the fixes of the water level on */
         fix_set_water(1);
     }

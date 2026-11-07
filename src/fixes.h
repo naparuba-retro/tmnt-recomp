@@ -9,6 +9,8 @@ typedef enum {
     FIX_WATER_DRIFT,   /* PIZZA-002: the current of the water no longer leaves a speed that pushes the swimming turtle for ever (group water, key E) */
     FIX_WATER_SPINNER, /* PIZZA-003: the box of the rotating bar of the dam is a square a little smaller than its sprite, centred on it (it was a tall box hanging above it) (group water, key E) */
     FIX_CAMERA_FOLLOW, /* PIZZA-004: the camera catches up with a turtle that is far to one side of the screen (group camera, key C) */
+    FIX_BALANCE_DAMAGE, /* PIZZA-006: the damage of a normal attack of Leonardo, Raphael and Michelangelo is raised (group balance, key R) */
+    FIX_RAPH_REACH, /* PIZZA-007: the hit box of Raphael's sai is 7 pixels wider each side, so that it reaches 35 pixels in front of him (group balance, key R) */
     FIX_COUNT
 } FixId;
 
@@ -27,5 +29,11 @@ int fix_is_camera(FixId id);
 void fix_toggle_camera(void);
 int fix_camera_enabled(void);
 void fix_set_camera(int on);
+
+/* The balance options are a fourth group, with the key R and the option --balance. */
+int fix_is_balance(FixId id);
+void fix_toggle_balance(void);
+int fix_balance_enabled(void);
+void fix_set_balance(int on);
 
 #endif

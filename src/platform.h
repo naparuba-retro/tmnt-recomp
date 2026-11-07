@@ -26,6 +26,7 @@ typedef struct {
     int water;      /* E */
     int camera;     /* C */
     int spawn;      /* S */
+    int balance;    /* R */
     int flicker;    /* F */
     int large;      /* L */
     int restart;    /* F5 */

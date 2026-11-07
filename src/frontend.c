@@ -1,7 +1,7 @@
 /* Player front-end (the executable `tmnt`): finds the ROM, runs the game at 60 frames per second and relays keys, picture and sound
  * through platform.h (Windows or SDL2). The pace comes from the sound card: 735 samples at 44100 Hz per frame.
  * Keys: arrows = d-pad, Z or W = B, X = A, Enter = Start, Tab or right Shift = Select, M = sound, P = pause, I = invincible,
- * H = hit boxes, J = the fixes of FIXES.md, E = the water fixes, C = the camera fix, S = the spawn mask, F = no sprite flicker, L = large view, F5 = restart, F9 = rewind, F10 = capture, Esc = quit. */
+ * H = hit boxes, J = the fixes of FIXES.md, E = the water fixes, C = the camera fix, S = the spawn mask, R = the balance, F = no sprite flicker, L = large view, F5 = restart, F9 = rewind, F10 = capture, Esc = quit. */
 #include <stdlib.h>
 #include <string.h>
 #include "fixes.h"
@@ -364,6 +364,9 @@ static void parse_options(int argc, char **argv) {
         if (!strcmp(argv[i], "--camera-fix")) {
             fix_set_camera(1);
         }
+        if (!strcmp(argv[i], "--balance")) {
+            fix_set_balance(1);
+        }
         if (!strcmp(argv[i], "--no-flicker")) {
             ppu_set_sprite_limit(64);
         }
@@ -470,11 +473,11 @@ static void run_game_frame(Game *g, int audio) {
     render(g);
     platform_present(screen);
     if ((int)g->frame / 60 != last_title_frame && g->frame % 60 == 0) {
-        char t[160];
+        char t[240];
         last_title_frame = (int)g->frame / 60;
-        snprintf(t, sizeof t, "TMNT (Europe) - port C | mode %d.%d%s%s%s%s%s%s%s%s", g->ram[GameMode], g->ram[GameSubMode], muted ? " | muted" : "",
+        snprintf(t, sizeof t, "TMNT (Europe) - port C | mode %d.%d%s%s%s%s%s%s%s%s%s", g->ram[GameMode], g->ram[GameSubMode], muted ? " | muted" : "",
                  audio ? "" : " | no sound card", fix_any_enabled() ? " | FIXES ON (J)" : "", fix_water_enabled() ? " | WATER FIXES (E)" : "",
-                 fix_camera_enabled() ? " | CAMERA FIX (C)" : "", spawn_mask_active() ? " | SPAWN MASK (S)" : "",
+                 fix_camera_enabled() ? " | CAMERA FIX (C)" : "", spawn_mask_active() ? " | SPAWN MASK (S)" : "", fix_balance_enabled() ? " | BALANCE (R)" : "",
                  ppu_sprite_limit() > 8 ? " | NO FLICKER (F)" : "", large_view_enabled() ? " | LARGE VIEW (L)" : "");
         platform_set_title(t);
     }
@@ -545,6 +548,11 @@ int main(int argc, char **argv) {
             fix_toggle_camera();
             platform_set_title(fix_camera_enabled() ? "TMNT (Europe) - port C | CAMERA FIX ON (C to switch off)"
                                                     : "TMNT (Europe) - port C | camera fix off (C to switch on)");
+        }
+        if (ev.balance) { /* the damage of the normal attacks and the reach of Raphael's sai (key R, group of its own) */
+            fix_toggle_balance();
+            platform_set_title(fix_balance_enabled() ? "TMNT (Europe) - port C | BALANCE ON (R to switch off)"
+                                                     : "TMNT (Europe) - port C | balance off (R to switch on)");
         }
         if (ev.spawn) { /* the spawn mask of the Whole Pizza edition (key S): the spawns to come, not the enemies already there */
             spawn_mask_set_enabled(!spawn_mask_enabled());

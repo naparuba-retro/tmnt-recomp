@@ -1,5 +1,6 @@
 /* Contact with the player, bonuses, barricades, crates, and the player's weapon hitting enemies. */
 #include "game.h"
+#include "fixes.h"
 #include "enemy.h"
 #include "hal.h"
 #include "player.h"
@@ -298,6 +299,10 @@ void enemy_hit_by_weapon(Game *g, int x, int y) {
         }
     }
     uint8_t hp = M(EntHealth + x), dmg = R6(0x9BCB + idx);
+    if (fix_enabled(FIX_BALANCE_DAMAGE) && idx < 8) { /* PIZZA-006: normal attack (not the jump, not a sub-weapon, not a special weapon): 14 / 20 / 14 / 15 */
+        static const uint8_t balance[8] = {14, 17, 20, 20, 14, 19, 15, 16}; /* turtle * 2 (+ 1 at low health): the original's bonus at low health is kept */
+        dmg = balance[idx];
+    }
     if (hp > dmg) {
         M(EntHealth + x) = (uint8_t)(hp - dmg);
         return;

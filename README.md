@@ -75,13 +75,14 @@ tells you where to put the file. The ROM can also be given as an argument: `tmnt
 | E | switch the water fixes (dam level) on / off (see `FIXES.md`) |
 | C | switch the camera fix on / off: the camera catches up with the turtle (see `FIXES.md`) |
 | S | switch the spawn mask on / off: the enemy spawns cut by `data/spawn_mask.txt` (the Whole Pizza edition; only the spawns to come, see `FIXES.md`) |
+| R | switch the balance options on / off: more damage for Leonardo, Raphael and Michelangelo and a longer reach for Raphael (see `FIXES.md`) |
 | F | remove the sprite flicker (see below) |
 | L | large view: no random tiles at the top of the screen (see below) |
 | Esc | quit |
 
 The first game controller found works too: d-pad or left stick, A = jump, X or B = attack, Start, Back = Select, left trigger = rewind.
 
-Options: `--level2` ... `--level6` start directly in a level, `--invincible`, `--hitbox` (hit boxes shown from the start), `--fixes` (the fixes of `FIXES.md` on from the start), `--water-fixes` (the water ones), `--camera-fix` (the camera one), `--spawn-mask [file]` (the spawn mask on from the start; alone, it uses the `data/spawn_mask.txt` that comes with the game, in a `data` folder next to the executable like the `rom` folder; see `FIXES.md`), `--no-flicker` (no sprite flicker from the start), `--large` (large view from the start), `--input file` (plays the pad
+Options: `--level2` ... `--level6` start directly in a level, `--invincible`, `--hitbox` (hit boxes shown from the start), `--fixes` (the fixes of `FIXES.md` on from the start), `--water-fixes` (the water ones), `--camera-fix` (the camera one), `--balance` (the balance options on from the start), `--spawn-mask [file]` (the spawn mask on from the start; alone, it uses the `data/spawn_mask.txt` that comes with the game, in a `data` folder next to the executable like the `rom` folder; see `FIXES.md`), `--no-flicker` (no sprite flicker from the start), `--large` (large view from the start), `--input file` (plays the pad
 from a file of `first last mask` ranges instead of the keyboard), `--dump N name` (windowless: writes `name.bmp` and `name.wav` after N frames).
 
 ### Fixes
