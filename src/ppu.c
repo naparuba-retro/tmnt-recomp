@@ -10,7 +10,8 @@ static int large_on;                 /* large view (key L): see ppu_set_large() 
 static const PpuRowAbove *large_row; /* the row above the picture, or NULL when there is none */
 static PpuWriteHook write_hook;      /* sees the writes to the name tables (the large view runs the game's row drawing on a copy) */
 
-static int large_edges;     /* the screen is a picture of the map: the mask of the 8 left pixels and the black sprites of the right edge are not drawn */
+static uint8_t
+    line_edges[240];        /* by line: its edges are known (large view): the mask of the 8 left pixels and the black sprites of the right edge are not drawn */
 static int large_blank_top; /* lines at the top that show only the backdrop (the pause screen, see large_view.c) */
 static const PpuRowAbove *large_rows; /* the rows of the picture rebuilt from the map, by row of the name table (32 entries) */
 
@@ -20,8 +21,10 @@ void ppu_set_large(int on, const PpuRowAbove *row_above, const PpuRowAbove *rows
     large_rows = rows;
 }
 
-void ppu_set_large_edges(int on) {
-    large_edges = on;
+static int last_split_line = 240; /* the line of the sprite 0 hit of the last picture (240: no split) */
+
+int ppu_split_line(void) {
+    return last_split_line;
 }
 
 void ppu_set_large_blank_top(int lines) {
@@ -131,6 +134,12 @@ static void draw_background(Game *g, uint8_t *out, uint8_t *bg_c, int pass_from,
         }
     }
     for (int y = pass_from; y < 240; y++) {
+        int row_ty_y = row_ty[y];
+        /* the row of the video memory that the line belongs to: the picture shows 31 of them when it starts inside a row, and the last one (in the other name
+         * table) has the entry 30 of the rows of the large view */
+        int ridx = pass_from == 0 && (((t >> 12) & 7) + y) / 8 == 30 ? 30 : (row_ty_y >= 30 ? 31 : row_ty_y);
+        line_edges[y] = large_on && pass_from == 0 && ridx < 31 && large_rows && large_rows[ridx].edges_ok &&
+                        (p->mirror_v || large_rows[ridx].row_nt == ((row_nt[y] >> 1) & 1));
         uint8_t *bg_row = &bg_c[y * 256], *out_row = &out[y * 256];
         if (!show_bg || y < large_blank_top) {
             memset(bg_row, 0, 256);
@@ -150,7 +159,7 @@ static void draw_background(Game *g, uint8_t *out, uint8_t *bg_c, int pass_from,
             if (len > 256 - x) {
                 len = 256 - x;
             }
-            if (x < 8 && !(p->mask & 2) && !(large_on && large_edges)) { /* the 8 leftmost pixels are hidden (not in the large view) */
+            if (x < 8 && !(p->mask & 2) && !line_edges[y]) { /* the 8 leftmost pixels are hidden (not in the large view) */
                 if (len > 8 - x) {
                     len = 8 - x;
                 }
@@ -160,7 +169,7 @@ static void draw_background(Game *g, uint8_t *out, uint8_t *bg_c, int pass_from,
             }
             int tx = sx >> 3;
             uint8_t tile, palette;
-            if (large_on && ty >= 30) {
+            if (large_on && pass_from == 0 && ty >= 30) {
                 /* Rows 30 and 31 are not rows of the picture: the PPU reads the attribute table as tiles there. With the large view, the tile of the row
                  * above the picture is used instead, and the backdrop colour where there is none. */
                 int idx = (p->mirror_v ? (nt & 1) << 5 : 0) | tx;
@@ -171,17 +180,17 @@ static void draw_background(Game *g, uint8_t *out, uint8_t *bg_c, int pass_from,
                 }
                 tile = large_row->tile[idx];
                 palette = large_row->pal[idx];
-            } else if (large_on && !p->mirror_v && large_rows && ((line_fx[y] + x) >> 3) == 32 && large_rows[ty].row_nt == ((nt >> 1) & 1) &&
-                       large_rows[ty].wrap_have) {
+            } else if (large_on && pass_from == 0 && !p->mirror_v && large_rows && ((line_fx[y] + x) >> 3) == 32 &&
+                       large_rows[ridx].row_nt == ((nt >> 1) & 1) && large_rows[ridx].wrap_have) {
                 /* the partial column at the right edge: with one name table across, the video memory shows the first column again there */
-                tile = large_rows[ty].wrap_tile;
-                palette = large_rows[ty].wrap_pal;
-            } else if (large_on && large_rows && (p->mirror_v || large_rows[ty].row_nt == ((nt >> 1) & 1)) &&
-                       large_rows[ty].have[(p->mirror_v ? (nt & 1) << 5 : 0) | tx]) {
+                tile = large_rows[ridx].wrap_tile;
+                palette = large_rows[ridx].wrap_pal;
+            } else if (large_on && pass_from == 0 && large_rows && (p->mirror_v || large_rows[ridx].row_nt == ((nt >> 1) & 1)) &&
+                       large_rows[ridx].have[(p->mirror_v ? (nt & 1) << 5 : 0) | tx]) {
                 /* a tile of the map where the video memory is not up to date (see large_view.c) */
                 int idx = (p->mirror_v ? (nt & 1) << 5 : 0) | tx;
-                tile = large_rows[ty].tile[idx];
-                palette = large_rows[ty].pal[idx];
+                tile = large_rows[ridx].tile[idx];
+                palette = large_rows[ridx].pal[idx];
             } else {
                 uint16_t base = (uint16_t)(0x2000 + nt * 0x400);
                 tile = *vram_ptr(g, (uint16_t)(base + ty * 32 + tx));
@@ -265,7 +274,7 @@ static void draw_sprites(Game *g, uint8_t *out, const uint8_t *bg_c) {
             }
             uint8_t tile = p->oam[s * 4 + 1], attr = p->oam[s * 4 + 2];
             int sx = p->oam[s * 4 + 3];
-            if (large_on && large_edges && sx == 248 && tile == 0x0F) {
+            if (large_on && line_edges[y] && sx == 248 && tile == 0x0F) {
                 continue; /* the column of black sprites that hides the right edge of the picture (it counted for the 8 per line) */
             }
             if (attr & 0x80) {
@@ -283,7 +292,7 @@ static void draw_sprites(Game *g, uint8_t *out, const uint8_t *bg_c) {
             uint8_t lo = chr_byte(g, hi_table, a), hb = chr_byte(g, hi_table, (uint16_t)(a + 8));
             for (int i = 0; i < 8; i++) {
                 int x = sx + i;
-                if (x > 255 || done[x] || (x < 8 && !(p->mask & 4) && !(large_on && large_edges))) {
+                if (x > 255 || done[x] || (x < 8 && !(p->mask & 4) && !line_edges[y])) {
                     continue;
                 }
                 int bit = (attr & 0x40) ? i : 7 - i;
@@ -316,8 +325,21 @@ void ppu_render(Game *g, uint8_t *out) {
     /* A split (status bar) changes the scroll after the sprite 0 line.
      * The split falls around pixel 16 of the line after the hit, depending on the phase of the game's idle loop:
      * a few pixels of that line differ from Mesen (3 pixels over 48 frames of the building 0 trace) */
+    last_split_line = 240;
     if (p->split_on && show_spr) {
-        int hit = sprite0_hit_line(g, bg_c);
+        int hit;
+        if (large_on) {
+            /* The line of the split is the one of the picture of the video memory: what the large view puts on the screen (the edges, the first rows) must not move it. */
+            static uint8_t plain_out[256 * 240], plain_bg[256 * 240];
+            large_on = 0;
+            memset(plain_bg, 0, sizeof plain_bg);
+            draw_background(g, plain_out, plain_bg, 0, p->t, p->x);
+            large_on = 1;
+            hit = sprite0_hit_line(g, plain_bg);
+        } else {
+            hit = sprite0_hit_line(g, bg_c);
+        }
+        last_split_line = hit;
         if (hit != 240) { /* no hit: no split */
             memset(out + (hit + 1) * 256, backdrop, (size_t)(240 - (hit + 1)) * 256);
             draw_background(g, out, bg_c, hit + 1, p->split_v, p->split_x);

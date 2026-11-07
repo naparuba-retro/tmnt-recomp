@@ -175,19 +175,40 @@ static uint8_t pad_script_at(uint32_t frame) {
 }
 static uint32_t input_start;
 
+/* The line of the range that is still open is written at once and rewritten every 30 frames (in place, padded with spaces), so that what has been played is in the
+ * file even if the game is killed while a button is held. */
+static long input_open_pos = -1;
+
+static void write_input_range(uint32_t first, uint32_t last, uint32_t mask) {
+    char line[64];
+    snprintf(line, sizeof line, "%u %u %u", first, last, mask);
+    fprintf(input_log, "%-40s\n", line);
+}
+
 static void record_input(Game *g) {
     if (!input_log) {
         return;
     }
     uint32_t f = g->frame - 1;
     if (g->pad == input_mask && f != 0) {
+        if (input_mask && f % 30 == 0 && input_open_pos >= 0) {
+            fseek(input_log, input_open_pos, SEEK_SET);
+            write_input_range(input_start, f, input_mask);
+            fflush(input_log);
+        }
         return;
     }
-    if (input_mask) {
-        fprintf(input_log, "%u %u %u\n", input_start, f - 1, input_mask);
+    if (input_mask && input_open_pos >= 0) {
+        fseek(input_log, input_open_pos, SEEK_SET);
+        write_input_range(input_start, f - 1, input_mask);
     }
     input_mask = g->pad;
     input_start = f;
+    input_open_pos = -1;
+    if (input_mask) {
+        input_open_pos = ftell(input_log);
+        write_input_range(f, f, input_mask);
+    }
     fflush(input_log);
 }
 

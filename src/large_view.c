@@ -16,7 +16,6 @@ static uint8_t written[0x800];
 static int slot_nt, slot_row;
 
 static void on_write(uint16_t addr, int vram_index, uint8_t value) {
-    (void)value;
     if (vram_index < 0 || vram_index >= 0x800) { /* a palette write: the palettes follow the name tables in memory */
         return;
     }
@@ -45,6 +44,7 @@ static void draw_row(Game *g, unsigned y, unsigned x) {
     M(PpuBuffer) = 0;
     M(PpuBufferIndex) = 0;
     draw_map_row(g);
+    M(PpuBuffer + M(PpuBufferIndex)) = 0; /* the end of the entries: the buffer holds what the game sent before, which would be sent too */
     flush_ppu_buffer(g);
 }
 
@@ -224,9 +224,32 @@ static void run_pass(const Game *source, unsigned x0, const unsigned *world_y, c
     free(g);
 }
 
-/* The rows of the picture rebuilt from the map: all the columns for the 3 first rows, and the 4 columns at each edge for all of them. The game draws a row of the map from 8 pixels beyond the left edge, over 256 pixels: the column at the left and the ones at the
- * right are not up to date in the video memory (they show tiles that wrap from the other side), which a TV hid with the mask and with black sprites. Two
- * passes, one at a multiple of 32 pixels and one 32 pixels after, give all the world columns of the picture. */
+/* The passes cover 44 columns of the map, from 4 before the first column of the picture: the columns of the picture, and the ones that the video memory holds in
+ * the same place (the columns 32 before or after: see below). */
+#define PASS_COUNT 5
+typedef struct {
+    int base_col; /* the first world column of the pass (it may be negative: the pass is then empty) */
+    PassRow row[31];
+} Pass;
+
+/* The pass that has the world column `col` for the picture row j, and its position in it. */
+static const PassRow *find_column(const Pass *passes, int j, int col, int *rel) {
+    for (int p = 0; p < PASS_COUNT; p++) {
+        int r = col - passes[p].base_col;
+        if (r >= 0 && r < 32 && passes[p].row[j].valid) {
+            *rel = r;
+            return &passes[p].row[j];
+        }
+    }
+    return NULL;
+}
+
+/* The rows of the picture, rebuilt from the map where the video memory is not up to date:
+ *  - the columns that a TV hid (the 8 pixels of each edge, which the mask and the black sprites of the game covered): the game draws the map over 256 pixels from
+ *    8 pixels beyond the left edge, so they are the ones that it does not draw, and the video memory holds there what a previous use left (the column 32 before
+ *    or after, in the same place of the ring). The map has them all, roofs included (the game draws them from the map too), so they are always the map's;
+ *  - the 3 first rows (the game scrolls first and draws the new row later), when their middle columns are the ones of the map.
+ * A row whose edges the map could not give is not marked (`edges_ok`): the mask and the black sprites keep hiding its edges. */
 static int build_screen(const Game *g, PpuRowAbove *rows) {
     memset(rows, 0, 32 * sizeof *rows);
     unsigned camera_y = M(CameraYLo) | M(CameraYHi) << 8, camera_x = M(CameraXLo) | M(CameraXHi) << 8;
@@ -237,10 +260,10 @@ static int build_screen(const Game *g, PpuRowAbove *rows) {
     int scroll_x = (mirror_v ? ((g->ppu.t >> 10) & 1) << 8 : 0) | ((g->ppu.t & 31) << 3) | (g->ppu.x & 7);
     int turns = ((int)camera_x - scroll_x + period / 2 + 16 * period) / period - 16;
     unsigned world_left = (unsigned)(scroll_x + turns * period);
-    int line_ty[30], valid[30], line_nt[30];
-    unsigned world_y[30];
+    int line_ty[31], valid[31], line_nt[31];
+    unsigned world_y[31];
     int count = 0;
-    for (int j = 0; j < 30; j++, count++) { /* (the last row of the picture, partial, shares its row with the first one, in the other name table) */
+    for (int j = 0; j < 31; j++, count++) { /* (the last row of the picture, partial, shares its row with the first one, in the other name table) */
         line_ty[j] = ty;
         line_nt[j] = mirror_v ? 0 : nn >> 1;
         valid[j] = 0;
@@ -261,35 +284,36 @@ static int build_screen(const Game *g, PpuRowAbove *rows) {
             ty = ty == 31 ? 0 : 31;
         }
     }
-    static PassRow pass_a[30], pass_b[30];
-    memset(pass_a, 0, sizeof pass_a);
-    memset(pass_b, 0, sizeof pass_b);
-    unsigned x_a = world_left & 0xFFE0; /* 32 pixels: an attribute byte covers 4 columns, and the routine builds it from the blocks it draws */
-    run_pass(g, x_a, world_y, valid, count, pass_a);
-    run_pass(g, x_a + 32, world_y, valid, count, pass_b);
-    unsigned first_world_col = world_left >> 3;
+    static Pass passes[PASS_COUNT];
+    memset(passes, 0, sizeof passes);
+    int first_world_col = (int)(world_left >> 3);
+    int base = (int)((world_left & 0xFFE0) >> 3) - 4; /* a multiple of 4 columns (32 pixels): an attribute byte covers 4 columns */
+    for (int p = 0; p < PASS_COUNT; p++) {
+        passes[p].base_col = base + 4 * p;
+        if (passes[p].base_col >= 0) {
+            run_pass(g, (unsigned)passes[p].base_col * 8, world_y, valid, count, passes[p].row);
+        }
+    }
     /* Is the screen a picture of the map at all? (the pause screen, the information screens and the other scenes are in mode 4 as well, or are drawn with the
      * same scroll): in a picture of the map the columns in the middle of the screen are exactly the ones that the map gives, which is checked here. Where they
      * are not, nothing is replaced. */
-    int same = 0, different = 0;
+    int same = 0, different = 0, row_different[31] = {0}, row_checked[31] = {0};
     for (int j = 0; j < count; j++) {
         if (!valid[j] || line_ty[j] >= 30) {
             continue;
         }
         for (int k = 8; k < 24; k++) {
-            int rel = (int)(first_world_col + (unsigned)k) - (int)(x_a >> 3);
-            const PassRow *r = &pass_a[j];
-            if (rel > 31) {
-                rel -= 4;
-                r = &pass_b[j];
-            }
-            if (!r->valid || rel < 0 || rel > 31) {
+            int rel;
+            const PassRow *r = find_column(passes, j, first_world_col + k, &rel);
+            if (!r) {
                 continue;
             }
+            row_checked[j]++;
             if (g->ppu.vram[r->nt[rel] * 0x400 + line_ty[j] * 32 + r->col[rel]] == r->tile[rel]) {
                 same++;
             } else {
                 different++;
+                row_different[j]++;
             }
         }
     }
@@ -297,51 +321,67 @@ static int build_screen(const Game *g, PpuRowAbove *rows) {
         return 0;
     }
     int fine = g->ppu.x != 0;
+    int hidden[4], hidden_count = 0; /* the columns of the picture that the mask and the black sprites hid */
+    hidden[hidden_count++] = 0;
+    if (fine) {
+        hidden[hidden_count++] = 1;
+    }
+    hidden[hidden_count++] = 31;
+    if (fine) {
+        hidden[hidden_count++] = 32;
+    }
     for (int j = 0; j < count; j++) {
-        if (!valid[j] || line_ty[j] >= 30) {
+        if (!valid[j] || line_ty[j] >= 30 || !row_checked[j]) {
             continue;
         }
-        PpuRowAbove *out = &rows[line_ty[j]];
+        int ty_row = line_ty[j], trusted = row_different[j] < 3;
+        PpuRowAbove *out = &rows[j == 30 ? 30 : ty_row]; /* the last row of the picture (the partial one) has its own entry */
         out->row_nt = (uint8_t)line_nt[j];
-        for (int k = 0; k < 33; k++) {
-            if (j >= 3 && k > 3 && k < 28) {
+        int decided = 1;
+        for (int h = 0; h < hidden_count; h++) {
+            int k = hidden[h], dst = first_world_col + k;
+            int map = dst == 0 ? 1 : dst; /* the first column of the map (the 8 pixels that the mask hid) is not part of the playfield: it holds other things */
+            int rel_dst, rel_map;
+            const PassRow *r_dst = find_column(passes, j, dst, &rel_dst), *r_map = find_column(passes, j, map, &rel_map);
+            if (!r_dst || !r_map) {
+                decided = 0;
                 continue;
             }
-            if (k == 32 && !fine) {
-                continue;
-            }
+            int nt = r_dst->nt[rel_dst];
+            uint8_t own = r_map->tile[rel_map];
             if (k == 32 && !mirror_v) { /* the same ring column as the first one: kept apart */
-                int rel32 = (int)(first_world_col + 32) - (int)(x_a >> 3);
-                const PassRow *r32 = &pass_a[j];
-                if (rel32 > 31) {
-                    rel32 -= 4;
-                    r32 = &pass_b[j];
-                }
-                if (r32->valid && rel32 >= 0 && rel32 <= 31) {
-                    out->wrap_have = 1;
-                    out->wrap_tile = r32->tile[rel32];
-                    out->wrap_pal = r32->pal[rel32];
-                }
+                out->wrap_have = 1;
+                out->wrap_tile = own;
+                out->wrap_pal = r_map->pal[rel_map];
                 continue;
             }
-            /* the first column of the map (the 8 pixels that the mask hid) is not part of the playfield: it holds other things (the edge of a building); the
-             * next one is shown instead */
-            unsigned world_col = first_world_col + (unsigned)k;
-            int rel = (int)(world_col == 0 ? 1 : world_col) - (int)(x_a >> 3);
-            const PassRow *r = &pass_a[j];
-            if (rel > 31) {
-                rel -= 4;
-                r = &pass_b[j];
-            }
-            if (!r->valid || rel < 0 || rel > 31) {
-                continue;
-            }
-            int idx = (mirror_v ? r->nt[rel] << 5 : 0) |
-                      (world_col & 31); /* (the column of the screen, which is not that of the tile read when the first column of the map is replaced) */
+            int idx = (mirror_v ? nt << 5 : 0) | (dst & 31);
             out->have[idx] = 1;
-            out->tile[idx] = r->tile[rel];
-            out->pal[idx] = r->pal[rel];
+            out->tile[idx] = own;
+            out->pal[idx] = r_map->pal[rel_map];
         }
+        if (j < 3 && trusted) { /* the first rows: all the columns */
+            for (int k = 0; k < 33; k++) {
+                if (k == 32 && (!fine || mirror_v)) {
+                    continue;
+                }
+                int dst = first_world_col + k, rel_m, rel_d;
+                const PassRow *r_m = find_column(passes, j, dst == 0 ? 1 : dst, &rel_m), *r_d = find_column(passes, j, dst, &rel_d);
+                if (!r_m || !r_d) {
+                    continue;
+                }
+                if (k == 32) {
+                    continue;
+                }
+                int idx = (mirror_v ? r_d->nt[rel_d] << 5 : 0) | (dst & 31);
+                if (!out->have[idx]) {
+                    out->have[idx] = 1;
+                    out->tile[idx] = r_m->tile[rel_m];
+                    out->pal[idx] = r_m->pal[rel_m];
+                }
+            }
+        }
+        out->edges_ok = (uint8_t)decided;
     }
     return 1;
 }
@@ -353,19 +393,16 @@ void large_view_prepare(Game *g) {
     ppu_set_large_blank_top(enabled && g->ram[GameMode] == 4 && g->ram[PauseFlag] ? 16 : 0);
     if (!enabled) {
         ppu_set_large(0, NULL, NULL);
-        ppu_set_large_edges(0);
         return;
     }
     memset(&row_above, 0, sizeof row_above);
     memset(screen_rows, 0, sizeof screen_rows);
-    int edges = 0;            /* the screen is a picture of the map: its edges are shown (the mask of the 8 left pixels and the black sprites are not drawn) */
     if (first_row(g) >= 30) { /* the lines read the attribute table: the row above, or the backdrop */
         build_row(g, &row_above, NULL, -1);
     }
     if (g->ram[GameMode] == 4) { /* in a level only: the map means nothing in the other scenes */
-        edges = build_screen(g, screen_rows);
+        build_screen(g, screen_rows);
     }
-    ppu_set_large_edges(edges);
     ppu_set_large(1, &row_above, screen_rows);
 }
 

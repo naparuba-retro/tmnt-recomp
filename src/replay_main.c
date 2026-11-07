@@ -458,6 +458,87 @@ static int check_large;  /* TMNT_LARGE=1 */
 static int check_camera; /* TMNT_CAMERA=1: counts the frames where the camera has not caught up with the turtle (player/scroll.c) */
 static unsigned camera_frames[3], camera_run, camera_longest, camera_longest_end;
 
+/* TMNT_LARGE_HUD=1: the large view is display only and must not change the status bar (the lines below the split of the sprite 0, away from the edges that it
+ * does change). Counts the frames where it does (tools/large_hud_check.sh). */
+static unsigned hud_frames, hud_bad_frames, hud_first_bad;
+
+static void check_large_hud(Game *g) {
+    if (g->ram[GameMode] != 4 || g->frame % 3) {
+        return;
+    }
+    static uint8_t plain[256 * 240], large[256 * 240];
+    large_view_set_enabled(0);
+    large_view_prepare(g);
+    ppu_render(g, plain);
+    large_view_set_enabled(1);
+    large_view_prepare(g);
+    ppu_render(g, large);
+    int split = ppu_split_line();
+    large_view_set_enabled(0);
+    large_view_prepare(g);
+    if (split >= 239) {
+        return;
+    }
+    hud_frames++;
+    for (int y = split + 1; y < 240; y++) {
+        if (memcmp(&plain[y * 256 + 8], &large[y * 256 + 8], 240)) {
+            if (!hud_bad_frames++) {
+                hud_first_bad = g->frame;
+            }
+            return;
+        }
+    }
+}
+
+/* TMNT_LARGE_EDGES=1: what the large view changes in the middle of the picture (the lines above the status bar, away from the first 16 lines and the 8
+ * pixels of each edge) must stay small: the edges of the map rebuilt from the map differ from the video memory only where it is stale. Keeps the largest number of
+ * different pixels over the frames (tools/large_edges_check.sh). */
+static unsigned edges_max_diff, edges_max_frame, edges_frames, edges_max_black, edges_black_frame;
+
+static void check_large_edges(Game *g) {
+    if (g->ram[GameMode] != 4) {
+        return;
+    }
+    static uint8_t plain[256 * 240], large[256 * 240];
+    large_view_set_enabled(0);
+    large_view_prepare(g);
+    ppu_render(g, plain);
+    large_view_set_enabled(1);
+    large_view_prepare(g);
+    ppu_render(g, large);
+    int split = ppu_split_line();
+    large_view_set_enabled(0);
+    large_view_prepare(g);
+    unsigned diff = 0, black = 0;
+    for (int y = 16; y < (split < 240 ? split : 232); y++) {
+        for (int x = 8; x < 248; x++) {
+            diff += plain[y * 256 + x] != large[y * 256 + x];
+            black += large[y * 256 + x] == 0x0F && plain[y * 256 + x] != 0x0F; /* black where there was none */
+        }
+    }
+    if (black > edges_max_black) {
+        edges_max_black = black;
+        edges_black_frame = g->frame;
+    }
+    edges_frames++;
+    if (diff > edges_max_diff) {
+        edges_max_diff = diff;
+        edges_max_frame = g->frame;
+    }
+}
+
+static void large_edges_report(void) {
+    fprintf(stderr,
+            "large view edges: %u frames checked, at most %u pixels differ from the plain picture (frame %u), at most %u are black where the plain picture has "
+            "none (frame %u)\n",
+            edges_frames, edges_max_diff, edges_max_frame, edges_max_black, edges_black_frame);
+}
+
+static void large_hud_report(void) {
+    fprintf(stderr, "large view and status bar: %u frames checked, %u with a status bar that the large view changes (the first: frame %u)\n", hud_frames,
+            hud_bad_frames, hud_first_bad);
+}
+
 static void camera_report(void) {
     fprintf(stderr,
             "camera: %u frames with the turtle far to the left of the screen (it could scroll left), %u far to the right; longest run %u frames, ending at "
@@ -474,6 +555,16 @@ static void run_frame(Replay *r) {
     apply_inputs(r);
     apply_random_seed(r);
     nmi_frame(g);
+    if (getenv("TMNT_TRACE_SCROLL")) { /* tests only: the scroll of every frame, to place the pictures in the world */
+        fprintf(stderr, "SCROLL f=%u camx=%02X%02X camy=%02X%02X t=%04X x=%d mirror_v=%d\n", g->frame, g->ram[CameraXHi], g->ram[CameraXLo], g->ram[CameraYHi],
+                g->ram[CameraYLo], g->ppu.t, g->ppu.x, g->ppu.mirror_v);
+    }
+    if (getenv("TMNT_LARGE_HUD")) {
+        check_large_hud(g);
+    }
+    if (getenv("TMNT_LARGE_EDGES")) {
+        check_large_edges(g);
+    }
     if (check_camera) {
         int far = camera_far_from_player(g);
         camera_frames[far]++;
@@ -622,6 +713,82 @@ int main(int argc, char **argv) {
         g->sound_tap = sound_tap;
     }
     game_init(g);
+    if (getenv("TMNT_RENDER_STATE")) { /* tests only: draws the picture of a saved state (F10 of the game), with the large view if TMNT_LARGE_PIX is set, into
+                                        * <dir>/state.pix, and leaves */
+        FILE *sf = fopen(getenv("TMNT_RENDER_STATE"), "rb");
+        if (!sf) {
+            fprintf(stderr, "tmnt_replay: cannot read the state %s\n", getenv("TMNT_RENDER_STATE"));
+            return 1;
+        }
+        Rom *rom = g->rom;
+        FILE *trace = g->trace;
+        void (*tap)(struct Game *) = g->sound_tap;
+        size_t n = fread(g, sizeof *g, 1, sf);
+        fclose(sf);
+        g->rom = rom;
+        g->trace = trace;
+        g->sound_tap = tap;
+        if (n != 1) {
+            fprintf(stderr, "tmnt_replay: the state is too short\n");
+            return 1;
+        }
+        if (getenv("TMNT_NO_FLICKER")) {
+            ppu_set_sprite_limit(64);
+        }
+        if (getenv(
+                "TMNT_STATE_FRAMES")) { /* tests only: goes on from the state with the buttons TMNT_STATE_PAD held, and draws every picture, with and without the large
+                                            * view, into <dir>/p<frame>.pix and <dir>/l<frame>.pix, and the scroll of each one into <dir>/scroll.txt */
+            int frames = atoi(getenv("TMNT_STATE_FRAMES")), pad = getenv("TMNT_STATE_PAD") ? atoi(getenv("TMNT_STATE_PAD")) : 0;
+            static uint8_t plain[256 * 240], large[256 * 240];
+            char name[512];
+            snprintf(name, sizeof name, "%s/scroll.txt", r->dir ? r->dir : ".");
+            FILE *sc = fopen(name, "w");
+            for (int i = 0; i < frames; i++) {
+                g->pad = (uint8_t)pad;
+                g->frame++;
+                rng_idle(g);
+                nmi_frame(g);
+                large_view_set_enabled(0);
+                large_view_prepare(g);
+                ppu_render(g, plain);
+                large_view_set_enabled(1);
+                large_view_prepare(g);
+                ppu_render(g, large);
+                large_view_set_enabled(0);
+                large_view_prepare(g);
+                if (sc) {
+                    fprintf(sc, "%u %d %d %d %d %d\n", g->frame, g->ram[CameraXHi] << 8 | g->ram[CameraXLo], g->ram[CameraYHi] << 8 | g->ram[CameraYLo],
+                            g->ppu.t, g->ppu.x, g->ppu.mirror_v);
+                }
+                for (int k = 0; k < 2; k++) {
+                    snprintf(name, sizeof name, "%s/%c%05u.pix", r->dir ? r->dir : ".", k ? 'l' : 'p', g->frame);
+                    FILE *out = fopen(name, "wb");
+                    if (out) {
+                        fwrite(k ? large : plain, 1, sizeof plain, out);
+                        fclose(out);
+                    }
+                }
+            }
+            if (sc) {
+                fclose(sc);
+            }
+            return 0;
+        }
+        static uint8_t picture[256 * 240];
+        if (getenv("TMNT_LARGE_PIX")) {
+            large_view_set_enabled(1);
+            large_view_prepare(g);
+        }
+        ppu_render(g, picture);
+        char name[512];
+        snprintf(name, sizeof name, "%s/state.pix", r->dir ? r->dir : ".");
+        FILE *out = fopen(name, "wb");
+        if (out) {
+            fwrite(picture, 1, sizeof picture, out);
+            fclose(out);
+        }
+        return 0;
+    }
 #ifdef SNDDIFF
     if (getenv("SNDALL")) {
         play_every_sound(g);
@@ -629,6 +796,12 @@ int main(int argc, char **argv) {
         return 0;
     }
 #endif
+    if (getenv("TMNT_LARGE_HUD")) {
+        atexit(large_hud_report);
+    }
+    if (getenv("TMNT_LARGE_EDGES")) {
+        atexit(large_edges_report);
+    }
     if (getenv("TMNT_CAMERA")) {
         check_camera = 1;
         atexit(camera_report);
@@ -636,6 +809,9 @@ int main(int argc, char **argv) {
     if (getenv("TMNT_LARGE")) {
         check_large = 1;
         atexit(large_view_report);
+    }
+    if (getenv("TMNT_NO_FLICKER")) { /* tests only: all the sprites of a line, as the F key */
+        ppu_set_sprite_limit(64);
     }
     if (getenv("TMNT_CAMERA_FIX")) { /* tests only: the camera fix on (tools/camera_check.sh) */
         fix_set_camera(1);

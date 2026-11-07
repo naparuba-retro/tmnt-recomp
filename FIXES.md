@@ -135,7 +135,8 @@ stands still never makes the screen move.
 
 **Fix.** When the turtle is below `$58` (or above `$A8`), the screen could scroll that way, and the camera is not held, the camera is moved 2 pixels per frame more than
 the turtle walks, towards it, and the turtle is moved on the screen by what the camera has moved: it comes back to `$58` (or `$A8`) in a few frames, standing still or
-walking. Nothing changes when the flag is off, nor between `$58` and `$A8`.
+walking, at 4 pixels per frame at most (the original's own limit: above it the scroll's column drawing, B7 `$D7D6`, skips a column and leaves a stale tile in the
+floor; `bash tools/scroll_columns_check.sh` checks it on `sessions/camera_tunnel`). Nothing changes when the flag is off, nor between `$58` and `$A8`.
 
 **Intention assumed.** A camera that follows the turtle is meant to show what is ahead; the stuck view is a consequence of the speed-only follow, not a rule.
 

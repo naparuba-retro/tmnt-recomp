@@ -26,6 +26,12 @@ static LRESULT CALLBACK wndproc(HWND h, UINT m, WPARAM w, LPARAM l) {
             pending.quit = 1;
             PostQuitMessage(0);
             return 0;
+        case WM_SYSKEYDOWN: /* F10 is a system key on Windows: it does not come as WM_KEYDOWN */
+            if (w == VK_F10 && !(l & 0x40000000)) {
+                pending.capture = 1;
+                return 0;
+            }
+            return DefWindowProc(h, m, w, l);
         case WM_KEYDOWN:
             if (l & 0x40000000) {
                 return 0; /* auto-repeat */

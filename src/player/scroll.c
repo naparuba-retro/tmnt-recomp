@@ -75,11 +75,11 @@ static int camera_recentre(Game *g) {
     }
     int own = (int8_t)M(EntVelX); /* the turtle's own speed, applied after the scroll */
     int speed = left ? (own < 0 ? own : 0) - 2 : (own > 0 ? own : 0) + 2;
-    if (speed < -6) {
-        speed = -6;
+    if (speed < -4) { /* 4 pixels at most, as the original (scroll_speed_limit): the column drawing of the scroll skips a column above it */
+        speed = -4;
     }
-    if (speed > 6) {
-        speed = 6;
+    if (speed > 4) {
+        speed = 4;
     }
     M(CameraSpeedX) = (uint8_t)speed;
     M(CameraSpeedXFrac) = 0;

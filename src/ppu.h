@@ -15,7 +15,9 @@ void ppu_render(Game *g, uint8_t *out); /* 256x240 NES palette indices (0-63) */
  * on, those lines show instead the row above, when the level has one (`row_above`: tiles and palettes by name table column, 0-31 plus 32 for the second
  * name table when the mirroring is vertical), and the backdrop colour when it has not. Display only. */
 typedef struct {
-    uint8_t have[64];                       /* the tile of this column is known */
+    uint8_t have[64]; /* the tile of this column is known */
+    uint8_t
+        edges_ok; /* the left and right edges of this row are known: the mask of the 8 left pixels and the black sprites of the right edge are not drawn on it */
     uint8_t wrap_have, wrap_tile, wrap_pal; /* the tile of the partial column at the right edge (with one name table across it is the one of the left edge) */
     uint8_t row_nt;                         /* for the rows of the picture: the name table of the row (when the mirroring is horizontal) */
     uint8_t tile[64];
@@ -27,8 +29,8 @@ typedef struct {
  * rest). */
 /* The first `lines` lines show only the backdrop colour, sprites included. Set by large_view_prepare() when the large view is on. */
 void ppu_set_large_blank_top(int lines);
-/* The screen is a picture of the map (large view): its left and right edges are shown. */
-void ppu_set_large_edges(int on);
+/* The line of the sprite 0 hit of the last picture that ppu_render() drew: the lines below it are the status bar (240: none). */
+int ppu_split_line(void);
 void ppu_set_large(int on, const PpuRowAbove *row_above, const PpuRowAbove *rows);
 
 /* Called for every write of a tile or an attribute to the name tables: the address ($2000-$2FFF), the index in the 2 KB of video memory, the value. */
