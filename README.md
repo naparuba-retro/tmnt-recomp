@@ -35,7 +35,7 @@ for the European and the American releases.
 
 ## Download
 
-The releases page has, for each version, `tmnt-<version>-windows-x64.zip` (contains `tmnt.exe`) and `tmnt-<version>-linux-x86_64.tar.gz` (contains the
+The releases page has, for each version, `tmnt-<version>-windows-x64.zip` (contains `tmnt.exe` and the `data` folder with `spawn_mask.txt`) and `tmnt-<version>-linux-x86_64.tar.gz` (contains the
 executable `tmnt`, which needs the SDL2 library: `sudo apt-get install libsdl2-2.0-0`). Unpack, put your ROM in the `rom` folder that is already next to the
 executable (see below), start it. Every other build of the CI (`tmnt-dev-<commit>-...`) is only in the Actions tab, as an artifact of the workflow run.
 
