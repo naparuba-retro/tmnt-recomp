@@ -1,0 +1,277 @@
+{
+ "version": 1,
+ "desactives": [
+  {
+   "cle": "L3.bat0.0-0.#0",
+   "adresse": "B123",
+   "signature": "40,A0,A4",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L3.bat5.2-1.#0",
+   "adresse": "B3C0",
+   "signature": "60,60,89",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L3.bat5.2-1.#1",
+   "adresse": "B3C3",
+   "signature": "C2,80,89",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L3.bat5.3-1.#0",
+   "adresse": "B3C7",
+   "signature": "40,60,89",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L3.bat5.3-1.#1",
+   "adresse": "B3CA",
+   "signature": "A0,60,89",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L3.bat5.3-1.#2",
+   "adresse": "B3CD",
+   "signature": "C0,80,89",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L3.bat5.4-1.#1",
+   "adresse": "B3D4",
+   "signature": "A0,40,92",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L3.bat5.4-1.#2",
+   "adresse": "B3D7",
+   "signature": "C0,80,92",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L3.bat5.5-1.#1",
+   "adresse": "B3DE",
+   "signature": "A0,40,92",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L6.bat0.3-4.#0",
+   "adresse": "B9A0",
+   "signature": "40,A0,9B",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L6.bat0.3-4.#1",
+   "adresse": "B9A3",
+   "signature": "90,A0,9B",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L6.bat2.1-1.#0",
+   "adresse": "BA8F",
+   "signature": "60,60,AD",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L6.bat2.2-1.#0",
+   "adresse": "BA96",
+   "signature": "20,60,92",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L6.bat2.2-1.#2",
+   "adresse": "BA9C",
+   "signature": "E0,60,AD",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L6.bat2.3-1.#0",
+   "adresse": "BAA3",
+   "signature": "20,60,92",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L6.bat2.3-1.#2",
+   "adresse": "BAA9",
+   "signature": "80,60,AD",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L6.bat2.3-1.#4",
+   "adresse": "BAAF",
+   "signature": "F0,60,92",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L6.bat2.4-1.#0",
+   "adresse": "BAB6",
+   "signature": "40,60,AD",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L6.bat2.4-1.#2",
+   "adresse": "BABC",
+   "signature": "A0,60,92",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L6.bat2.4-1.#4",
+   "adresse": "BAC2",
+   "signature": "C0,60,AD",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L6.bat2.5-1.#0",
+   "adresse": "BAC9",
+   "signature": "20,80,92",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L6.bat2.5-1.#1",
+   "adresse": "BACC",
+   "signature": "40,80,AD",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L6.bat2.5-1.#4",
+   "adresse": "BAD5",
+   "signature": "A0,80,92",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L6.bat2.5-1.#5",
+   "adresse": "BAD8",
+   "signature": "C0,80,AD",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L6.bat2.5-1.#6",
+   "adresse": "BADB",
+   "signature": "E0,80,92",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L6.bat2.6-1.#0",
+   "adresse": "BADF",
+   "signature": "00,80,AD",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L6.bat2.6-1.#3",
+   "adresse": "BAE8",
+   "signature": "60,80,92",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L6.bat2.6-1.#4",
+   "adresse": "BAEB",
+   "signature": "80,80,AD",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L6.bat2.6-1.#5",
+   "adresse": "BAEE",
+   "signature": "A0,80,92",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L6.bat2.6-1.#6",
+   "adresse": "BAF1",
+   "signature": "C0,80,AD",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L6.bat2.7-1.#1",
+   "adresse": "BAFB",
+   "signature": "20,80,92",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L6.bat2.7-1.#2",
+   "adresse": "BAFE",
+   "signature": "40,80,AD",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L6.bat2.7-1.#3",
+   "adresse": "BB01",
+   "signature": "60,80,92",
+   "jeux_desactives": [
+    "*"
+   ]
+  },
+  {
+   "cle": "L6.bat2.7-1.#4",
+   "adresse": "BB04",
+   "signature": "80,80,AD",
+   "jeux_desactives": [
+    "*"
+   ]
+  }
+ ]
+}

@@ -1,0 +1,5 @@
+{
+ "_aide": "Noms des types d'ennemis affiches dans l'editeur : \"type en hexadecimal\": \"nom\". Ces noms completent ceux deja decides (docs/ennemis_references.md). Relancer `python run.py export` apres modification.",
+ "types": {
+ }
+}

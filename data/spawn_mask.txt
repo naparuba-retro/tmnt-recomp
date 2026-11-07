@@ -1,0 +1,37 @@
+# version 1
+# fichier genere par spawn_editor : ne pas editer a la main (voir spawn_mask.json)
+# B6 <adresse EU>  <x> <y> <code>  <jeux de sprites coupes, hex, ou *>
+B6 B123  40 A0 A4  *
+B6 B3C0  60 60 89  *
+B6 B3C3  C2 80 89  *
+B6 B3C7  40 60 89  *
+B6 B3CA  A0 60 89  *
+B6 B3CD  C0 80 89  *
+B6 B3D4  A0 40 92  *
+B6 B3D7  C0 80 92  *
+B6 B3DE  A0 40 92  *
+B6 B9A0  40 A0 9B  *
+B6 B9A3  90 A0 9B  *
+B6 BA8F  60 60 AD  *
+B6 BA96  20 60 92  *
+B6 BA9C  E0 60 AD  *
+B6 BAA3  20 60 92  *
+B6 BAA9  80 60 AD  *
+B6 BAAF  F0 60 92  *
+B6 BAB6  40 60 AD  *
+B6 BABC  A0 60 92  *
+B6 BAC2  C0 60 AD  *
+B6 BAC9  20 80 92  *
+B6 BACC  40 80 AD  *
+B6 BAD5  A0 80 92  *
+B6 BAD8  C0 80 AD  *
+B6 BADB  E0 80 92  *
+B6 BADF  00 80 AD  *
+B6 BAE8  60 80 92  *
+B6 BAEB  80 80 AD  *
+B6 BAEE  A0 80 92  *
+B6 BAF1  C0 80 AD  *
+B6 BAFB  20 80 92  *
+B6 BAFE  40 80 AD  *
+B6 BB01  60 80 92  *
+B6 BB04  80 80 AD  *

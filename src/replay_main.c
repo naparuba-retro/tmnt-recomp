@@ -824,7 +824,8 @@ int main(int argc, char **argv) {
         fix_set_all(1);
     }
     if (getenv("TMNT_SPAWN_MASK")) { /* tests only: the spawn mask file (tools/spawn_mask_check.sh) */
-        spawn_mask_load(getenv("TMNT_SPAWN_MASK"), g->rom);
+        spawn_mask_load(getenv("TMNT_SPAWN_MASK"), g->rom, 0);
+        spawn_mask_set_enabled(1);
     }
     if (getenv("TMNT_HITBOX")) { /* fills the hit box journal (tests: the game must not change, and the formula must match the game's boxes) */
         hitbox_set_enabled(1);

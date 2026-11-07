@@ -9,7 +9,7 @@ How to switch them on, for tests and demonstrations:
 - in the game, the **J** key switches the fixes on or off (the window title shows `FIXES ON`), or start with `--fixes`;
 - the fixes of the water level (dam) are a group of their own: the **E** key (title: `WATER FIXES`), or `--water-fixes`; J does not touch them;
 - the fix of the camera is a third group: the **C** key (title: `CAMERA FIX`), or `--camera-fix`;
-- the **spawn mask** (PIZZA-005) is not a key: start with `--spawn-mask <file>` (the window title shows `SPAWN MASK`), or `TMNT_SPAWN_MASK=<file>` in the replay tool;
+- the **spawn mask** (PIZZA-005) is loaded at start from `data/spawn_mask.txt` (an absent file is an empty mask): the **S** key switches it on or off (title: `SPAWN MASK (S)`), or start with `--spawn-mask` (on from the start; with a file name, that file instead of the shipped one), or `TMNT_SPAWN_MASK=<file>` in the replay tool;
 - in the replay tool, the environment variable `TMNT_FIXES=1` (all of them; `TMNT_FIXES=1 bash tools/verify_all.sh` shows where the replays leave the original's) `TMNT_WATER_FIXES=1` (the water ones only) or `TMNT_CAMERA_FIX=1` (the camera one).
 
 | Id | Fix | Evidence | Effect on the TAS |
@@ -18,7 +18,7 @@ How to switch them on, for tests and demonstrations:
 | PIZZA-002 (water, key E) | The current of the water no longer leaves a speed that pushes the swimming turtle for ever | the code, the TAS (BizHawk), and Upsilandre's blog | the TAS leaves the original's at image 10854 |
 | PIZZA-003 (water, key E) | The rotating bar of the dam has a box that matches its sprite | the code, a measure in the TAS, and Upsilandre's blog | none by itself (the TAS already leaves the original's at 10854) |
 | PIZZA-004 (camera, key C) | The camera catches up with a turtle that is far to one side of the screen | the code, and a recorded game (`sessions/camera_midboss`) | none (the TAS never gets there with the fix off; the fix is off in the replays) |
-| PIZZA-005 (spawn mask, `--spawn-mask`) | Enemy spawns listed in a file written by the spawn editor (`spawn_editor/`) are not created, one by one and per sprite set; the bosses never | the editor and `sessions/spawn_mask` (`bash tools/spawn_mask_check.sh`) | none (the option is off in the replays; with an empty or wrong mask the RAM is identical to the original's on 1916 frames) |
+| PIZZA-005 (spawn mask, key S) | Enemy spawns listed in a file written by the spawn editor (`spawn_editor/`) are not created, one by one and per sprite set; the bosses never | the editor and `sessions/spawn_mask` (`bash tools/spawn_mask_check.sh`) | none (the option is off in the replays; with an empty or wrong mask the RAM is identical to the original's on 1916 frames) |
 
 ## PIZZA-001: a ceiling no longer stops the turtle's horizontal speed
 
@@ -162,4 +162,6 @@ addresses, the same in the US ROM), its signature (x, y, code) and the sprite se
 a line that does not match is ignored with a warning. The test is after the wave logic of `spawn_enemy`, which runs as before: only the enemy is missing. The
 bosses (types `$70`-`$7F`) are never cut. `spawn_initial_side` goes on to the next entry when a spawn is cut (`SPAWN_SKIPPED`, distinct from "no room left").
 
-**Effect.** Off by default and off in the replays and in `tools/verify_all.sh`. A wave whose enemies are all cut ends at once (tested on the three waves of level 1).
+**Delivery.** `port/data/spawn_mask.txt` is the mask of the Whole Pizza edition: the folder `data/` goes with the executable (like `rom/`). The spawn editor (`tools/spawn_editor/`, `python run.py`) writes it, with its source `data/spawn_mask.json`, at each save.
+
+**Effect.** Off by default (key S or `--spawn-mask` to switch it on) and off in the replays. Switching it on only acts on the spawns to come: an enemy already on the screen stays and in `tools/verify_all.sh`. A wave whose enemies are all cut ends at once (tested on the three waves of level 1).

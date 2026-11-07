@@ -53,6 +53,8 @@ static LRESULT CALLBACK wndproc(HWND h, UINT m, WPARAM w, LPARAM l) {
                 pending.water = 1;
             } else if (w == 'C') {
                 pending.camera = 1;
+            } else if (w == 'S') {
+                pending.spawn = 1;
             } else if (w == 'F') {
                 pending.flicker = 1;
             } else if (w == 'L') {

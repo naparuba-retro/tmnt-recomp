@@ -74,19 +74,23 @@ tells you where to put the file. The ROM can also be given as an argument: `tmnt
 | J | switch the fixes on / off (see `FIXES.md`) |
 | E | switch the water fixes (dam level) on / off (see `FIXES.md`) |
 | C | switch the camera fix on / off: the camera catches up with the turtle (see `FIXES.md`) |
+| S | switch the spawn mask on / off: the enemy spawns cut by `data/spawn_mask.txt` (the Whole Pizza edition; only the spawns to come, see `FIXES.md`) |
 | F | remove the sprite flicker (see below) |
 | L | large view: no random tiles at the top of the screen (see below) |
 | Esc | quit |
 
 The first game controller found works too: d-pad or left stick, A = jump, X or B = attack, Start, Back = Select, left trigger = rewind.
 
-Options: `--level2` ... `--level6` start directly in a level, `--invincible`, `--hitbox` (hit boxes shown from the start), `--fixes` (the fixes of `FIXES.md` on from the start), `--water-fixes` (the water ones), `--camera-fix` (the camera one), `--spawn-mask file` (enemy spawns cut by a file of the spawn editor, see `FIXES.md`), `--no-flicker` (no sprite flicker from the start), `--large` (large view from the start), `--input file` (plays the pad
+Options: `--level2` ... `--level6` start directly in a level, `--invincible`, `--hitbox` (hit boxes shown from the start), `--fixes` (the fixes of `FIXES.md` on from the start), `--water-fixes` (the water ones), `--camera-fix` (the camera one), `--spawn-mask [file]` (the spawn mask on from the start; alone, it uses the `data/spawn_mask.txt` that comes with the game, in a `data` folder next to the executable like the `rom` folder; see `FIXES.md`), `--no-flicker` (no sprite flicker from the start), `--large` (large view from the start), `--input file` (plays the pad
 from a file of `first last mask` ranges instead of the keyboard), `--dump N name` (windowless: writes `name.bmp` and `name.wav` after N frames).
 
 ### Fixes
 
 The port plays the original game. `FIXES.md` lists the corrections of the original that exist, each with its evidence and its effect on the TAS. They are off
 by default; the J key (or `--fixes`) switches them on, and the window title shows when they are on.
+
+The spawn mask (key S, `data/spawn_mask.txt`) is edited with the spawn editor, a small local web tool (`tools/spawn_editor/`, `python run.py`, needs Python 3 and Pillow, and
+your own ROM in `rom/`): it draws the levels and the enemies from your ROM, so what it generates (`build/`) must never be published.
 
 ### Large view
 
@@ -160,7 +164,8 @@ Enter, B becomes Escape), so B quits the game instead of attacking. Playing in D
       scenes/ stage_play/  cutscenes, level play, spawns, objects
       ram_map.h            names of the RAM variables
     tests/reference_game/  recorded inputs of the reference game and fingerprints of its original trace
-    tools/                 formatting and tests
+    data/                  data that comes with the game (spawn_mask.txt, read from the folder next to the executable)
+    tools/                 formatting and tests; spawn_editor/ is the editor of the spawn mask
 
 Comments in the code give the address of the original 6502 routine each function comes from (for instance `B5 $8907` = bank 5, address `$8907`).
 

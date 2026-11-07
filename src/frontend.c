@@ -1,7 +1,7 @@
 /* Player front-end (the executable `tmnt`): finds the ROM, runs the game at 60 frames per second and relays keys, picture and sound
  * through platform.h (Windows or SDL2). The pace comes from the sound card: 735 samples at 44100 Hz per frame.
  * Keys: arrows = d-pad, Z or W = B, X = A, Enter = Start, Tab or right Shift = Select, M = sound, P = pause, I = invincible,
- * H = hit boxes, J = the fixes of FIXES.md, E = the water fixes, C = the camera fix, F = no sprite flicker, L = large view, F5 = restart, F9 = rewind, F10 = capture, Esc = quit. */
+ * H = hit boxes, J = the fixes of FIXES.md, E = the water fixes, C = the camera fix, S = the spawn mask, F = no sprite flicker, L = large view, F5 = restart, F9 = rewind, F10 = capture, Esc = quit. */
 #include <stdlib.h>
 #include <string.h>
 #include "fixes.h"
@@ -474,8 +474,8 @@ static void run_game_frame(Game *g, int audio) {
         last_title_frame = (int)g->frame / 60;
         snprintf(t, sizeof t, "TMNT (Europe) - port C | mode %d.%d%s%s%s%s%s%s%s%s", g->ram[GameMode], g->ram[GameSubMode], muted ? " | muted" : "",
                  audio ? "" : " | no sound card", fix_any_enabled() ? " | FIXES ON (J)" : "", fix_water_enabled() ? " | WATER FIXES (E)" : "",
-                 fix_camera_enabled() ? " | CAMERA FIX (C)" : "", spawn_mask_active() ? " | SPAWN MASK" : "", ppu_sprite_limit() > 8 ? " | NO FLICKER (F)" : "",
-                 large_view_enabled() ? " | LARGE VIEW (L)" : "");
+                 fix_camera_enabled() ? " | CAMERA FIX (C)" : "", spawn_mask_active() ? " | SPAWN MASK (S)" : "",
+                 ppu_sprite_limit() > 8 ? " | NO FLICKER (F)" : "", large_view_enabled() ? " | LARGE VIEW (L)" : "");
         platform_set_title(t);
     }
 }
@@ -487,9 +487,20 @@ int main(int argc, char **argv) {
     }
     reset_game(g);
     parse_options(argc, argv);
-    for (int i = 1; i + 1 < argc; i++) {
-        if (!strcmp(argv[i], "--spawn-mask")) {
-            spawn_mask_load(argv[i + 1], g->rom);
+    { /* the spawn mask that comes with the game is always loaded (an absent one is an empty one); the key S, or --spawn-mask, switches it on */
+        char exe_dir[1024], found[1100];
+        platform_exe_dir(exe_dir, sizeof exe_dir);
+        const char *shipped = spawn_mask_default_path(exe_dir, found, sizeof found);
+        if (shipped) {
+            spawn_mask_load(shipped, g->rom, 1);
+        }
+        for (int i = 1; i < argc; i++) {
+            if (!strcmp(argv[i], "--spawn-mask")) { /* alone: the shipped mask; with a file: that one */
+                if (i + 1 < argc && argv[i + 1][0] != '-') {
+                    spawn_mask_load(argv[i + 1], g->rom, 0);
+                }
+                spawn_mask_set_enabled(1);
+            }
         }
     }
     open_logs(g);
@@ -534,6 +545,12 @@ int main(int argc, char **argv) {
             fix_toggle_camera();
             platform_set_title(fix_camera_enabled() ? "TMNT (Europe) - port C | CAMERA FIX ON (C to switch off)"
                                                     : "TMNT (Europe) - port C | camera fix off (C to switch on)");
+        }
+        if (ev.spawn) { /* the spawn mask of the Whole Pizza edition (key S): the spawns to come, not the enemies already there */
+            spawn_mask_set_enabled(!spawn_mask_enabled());
+            platform_set_title(!spawn_mask_count()    ? "TMNT (Europe) - port C | no spawn mask file (data/spawn_mask.txt)"
+                               : spawn_mask_enabled() ? "TMNT (Europe) - port C | SPAWN MASK ON (S to switch off)"
+                                                      : "TMNT (Europe) - port C | spawn mask off (S to switch on)");
         }
         if (ev.large) { /* the lines at the top of the screen show the map's row above, or the backdrop, not random tiles */
             large_view_set_enabled(!large_view_enabled());

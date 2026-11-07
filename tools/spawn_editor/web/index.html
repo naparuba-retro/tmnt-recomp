@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Editeur de spawns TMNT</title>
+<link rel="stylesheet" href="/web/style.css">
+</head>
+<body>
+<header class="top">
+  <h1>Editeur de spawns</h1>
+  <span id="rominfo" class="muted"></span>
+  <span class="spacer"></span>
+  <span id="summary" class="muted"></span>
+  <span id="status" class="status" role="status" aria-live="polite"></span>
+</header>
+
+<div class="layout">
+  <nav id="side" class="side" aria-label="Niveaux, zones et ecrans"></nav>
+
+  <main class="main">
+    <div class="toolbar">
+      <h2 id="ztitle">Zone</h2>
+      <div class="group" role="group" aria-label="Affichage">
+        <button id="v-zone" class="seg on" type="button">Zone entiere</button>
+        <button id="v-screen" class="seg" type="button">Ecran par ecran</button>
+      </div>
+      <div class="group" role="group" aria-label="Variantes" id="vargroup">
+        <button id="var-prev" type="button" title="Variante precedente (fleche gauche)">&#9664;</button>
+        <span id="var-label" class="varlabel"></span>
+        <button id="var-next" type="button" title="Variante suivante (fleche droite)">&#9654;</button>
+        <label class="chk"><input id="var-auto" type="checkbox"> auto</label>
+        <label class="chk"><input id="var-side" type="checkbox"> cote a cote</label>
+      </div>
+      <div class="group">
+        <label class="chk">Type
+          <select id="f-type"><option value="">tous</option></select></label>
+        <label class="chk"><input id="f-off" type="checkbox"> coupes seulement</label>
+        <label class="chk"><input id="f-labels" type="checkbox" checked> etiquettes</label>
+        <label class="chk">Zoom
+          <select id="f-zoom"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></label>
+      </div>
+    </div>
+    <div id="screenbar" class="screenbar" hidden></div>
+    <div id="stage" class="stage" tabindex="0" aria-label="Carte de la zone"></div>
+    <div class="listwrap">
+      <table id="list" class="list">
+        <thead><tr><th>Actif</th><th>Ecran</th><th>x</th><th>y</th><th>Code</th><th>Ennemi (variante affichee)</th><th>Genre</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </main>
+
+  <aside id="panel" class="panel" aria-label="Detail du spawn"></aside>
+</div>
+<script src="/web/app.js"></script>
+</body>
+</html>

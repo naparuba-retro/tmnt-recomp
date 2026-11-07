@@ -14,13 +14,39 @@ typedef struct {
 
 static MaskEntry *entries;
 static int entry_count;
+static int enabled;
 
 static int compare(const void *a, const void *b) {
     return (int)((const MaskEntry *)a)->address - (int)((const MaskEntry *)b)->address;
 }
 
+void spawn_mask_set_enabled(int on) {
+    enabled = on;
+}
+
+int spawn_mask_enabled(void) {
+    return enabled;
+}
+
+int spawn_mask_count(void) {
+    return entry_count;
+}
+
 int spawn_mask_active(void) {
-    return entry_count > 0;
+    return enabled && entry_count > 0;
+}
+
+const char *spawn_mask_default_path(const char *exe_dir, char *out, unsigned size) {
+    const char *fmt[4] = {"%s/data/spawn_mask.txt", "%s/spawn_mask.txt", "%s/../data/spawn_mask.txt", "data/spawn_mask.txt"};
+    for (int i = 0; i < 4; i++) {
+        snprintf(out, size, fmt[i], exe_dir);
+        FILE *f = fopen(out, "r");
+        if (f) {
+            fclose(f);
+            return out;
+        }
+    }
+    return NULL;
 }
 
 int spawn_masked(uint16_t address, uint8_t sprite_set) {
@@ -61,13 +87,15 @@ static void add_sets(MaskEntry *e, char *sets) {
     }
 }
 
-int spawn_mask_load(const char *path, const Rom *rom) {
+int spawn_mask_load(const char *path, const Rom *rom, int quiet) {
     free(entries);
     entries = NULL;
     entry_count = 0;
     FILE *f = fopen(path, "r");
     if (!f) {
-        fprintf(stderr, "spawn mask: cannot read %s\n", path);
+        if (!quiet) {
+            fprintf(stderr, "spawn mask: cannot read %s\n", path);
+        }
         return 0;
     }
     int capacity = 0, lineno = 0;
