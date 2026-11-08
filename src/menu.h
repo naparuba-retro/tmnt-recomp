@@ -25,6 +25,8 @@ typedef struct {
 void menu_set_keys(const MenuKeys *keys);
 /* The title screen of the game (256x240, 0xRRGGBB): the menu cuts the logo of the game out of it for the Original panel. Without it the panel shows a text. */
 void menu_set_logo_picture(const uint32_t *picture);
+/* Before menu_set_logo_picture: the logo is blurred beyond recognition (--blur-logo), so that a screenshot of the menu does not carry the game's artwork. */
+void menu_set_logo_blur(int on);
 
 typedef enum {
     MENU_NONE,

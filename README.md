@@ -60,6 +60,8 @@ This produces `build/tmnt` (the game) and `build/tmnt_replay` (a windowless repl
 Put your ROM (any file name) in a folder named `rom` next to the executable and start `tmnt`. If no ROM is found, the game creates the `rom` folder and
 tells you where to put the file. The ROM can also be given as an argument: `tmnt path/to/rom.nes`. The European release is preferred when both are in `rom`.
 
+The game opens on **the menu** (see below): pick an edition, the extras and a level, then PLAY. `--no-menu` (or any of `--levelN`, `--input`) skips it.
+
 | Key | Action |
 |---|---|
 | Arrows | d-pad |
@@ -67,8 +69,10 @@ tells you where to put the file. The ROM can also be given as an argument: `tmnt
 | X | A (jump) |
 | Enter | Start |
 | Tab / right Shift | Select (change weapon, leave the van) |
+| Esc | the menu over the frozen game; Esc again goes back to the game |
 | M / P | sound off / pause |
 | F5 / F9 / F10 | restart / rewind (a snapshot every 10 s) / debug capture |
+| F11 | fullscreen on / off |
 | I | invincibility cheat |
 | H | show / hide the hit boxes (see below) |
 | J | switch the fixes on / off (see `FIXES.md`) |
@@ -78,12 +82,50 @@ tells you where to put the file. The ROM can also be given as an argument: `tmnt
 | R | switch the balance options on / off: more damage for Leonardo, Raphael and Michelangelo and a longer reach for Raphael (see `FIXES.md`) |
 | F | remove the sprite flicker (see below) |
 | L | large view: no random tiles at the top of the screen (see below) |
-| Esc | the menu: PLAY (edition, extras, level), SOUND, GRAPHICS, CONTROLS, and Quit game. Esc again goes back to the game. At start the menu is the launcher (`--no-menu` skips it) |
 
-The first game controller found works too: d-pad or left stick, A = jump, X or B = attack, Start, Back = Select, left trigger = rewind.
+The keys of the pad buttons (arrows, Z / W, X, Enter, Tab / right Shift) can be changed in the menu, on the CONTROLS page: two keys per button. A key that the pad uses
+loses its shortcut (S as "down" no longer switches the spawn mask). The first game controller found works too: d-pad or left stick, A = jump, X or B = attack,
+Y = Select (weapon, van), Start (in the menu: play / resume), View / Back = the menu, LB and RB = the menu's pages, left trigger = rewind.
 
-Options: `--level2` ... `--level6` start directly in a level, `--invincible`, `--hitbox` (hit boxes shown from the start), `--fixes` (the fixes of `FIXES.md` on from the start), `--water-fixes` (the water ones), `--camera-fix` (the camera one), `--balance` (the balance options on from the start), `--spawn-mask [file]` (the spawn mask on from the start; alone, it uses the `data/spawn_mask.txt` that comes with the game, in a `data` folder next to the executable like the `rom` folder; see `FIXES.md`), `--no-flicker` (no sprite flicker from the start), `--large` (large view from the start), `--input file` (plays the pad
+The window always keeps the proportions of the picture (black bars when the window has another shape); "Integer scaling" in the menu also makes every pixel the same size.
+
+Options: `--level2` ... `--level6` start directly in a level, `--invincible`, `--hitbox` (hit boxes shown from the start), `--fixes` (the fixes of `FIXES.md` on from the start), `--water-fixes` (the water ones), `--camera-fix` (the camera one), `--balance` (the balance options on from the start), `--spawn-mask [file]` (the spawn mask on from the start; alone, it uses the `data/spawn_mask.txt` that comes with the game, in a `data` folder next to the executable like the `rom` folder; see `FIXES.md`), `--no-flicker` (no sprite flicker from the start), `--large` (large view from the start), `--no-menu` (no launcher), `--blur-logo` (the game's logo shown in the menu is blurred beyond recognition: for screenshots), `--input file` (plays the pad
 from a file of `first last mask` ranges instead of the keyboard), `--dump N name` (windowless: writes `name.bmp` and `name.wav` after N frames).
+
+### The menu
+
+<p>
+<img src="images/menu_play_original.png" alt="The PLAY page, Original edition" width="49%">
+<img src="images/menu_play_whole_pizza.png" alt="The PLAY page, Whole Pizza edition" width="49%">
+</p>
+
+The menu is a comic-book page drawn in high resolution at the size of the window (it is not part of the game, it is software-drawn over it), with four pages: **PLAY**, **SOUND**,
+**GRAPHICS**, **CONTROLS**, and a red **QUIT GAME** button. It works with the keyboard, the mouse and a pad (directions move the focus, A / Enter acts, B / Esc goes back, LB and RB turn the pages,
+Start plays or resumes).
+
+- **PLAY**: two editions. **Original** is the game exactly as it was in 1990 (everything below switched off, checked bit for bit against the original). **Whole Pizza** switches on the nine
+  options of `FIXES.md` (ceiling slide, water current, hitbox fixes, smart camera, spawn mask, damage balance, Raph's reach, large view, no flicker); click a tick to switch one off, and the
+  edition shows as *modified*. Extras (Invincible, Hitbox view) and the level where a new game starts. The PLAY button starts a new game, or resumes the one you left with Esc.
+  The Original panel shows the logo of the game, cut out of its own title screen at start-up from **your** ROM (nothing of it is stored or distributed). `--blur-logo` blurs it
+  beyond recognition, so that a screenshot of the menu can be shared.
+- **SOUND**: volume and mute.
+- **GRAPHICS**: large view, no flicker, hitbox view, fullscreen (also F11), integer scaling, show FPS.
+- **CONTROLS**: the keyboard (two keys per pad button, click a box and press the new key, Esc gives up, RESET KEYS) and the pad.
+
+<p>
+<img src="images/menu_graphics.png" alt="The GRAPHICS page" width="49%">
+<img src="images/menu_controls.png" alt="The CONTROLS page" width="49%">
+</p>
+
+What you change in the menu is written to `tmnt.ini`, next to the executable (or in your user folder when that one cannot be written): only the values that differ from the defaults, with
+the comments and the keys of other versions left alone. Delete a line to get the default back. Key codes are those of the platform (Windows virtual keys, SDL scancodes on Linux),
+so a file with changed keys does not carry from one system to the other. The command line wins over the file and is never saved. Cheats (invincible, start level) are not kept.
+
+If no ROM is found, the game shows the same comic-book style to tell you where to put it:
+
+<p><img src="images/menu_rom_missing.png" alt="The page shown when no ROM is found" width="49%"></p>
+
+The font of the menu is Komika (see the licence section) and the graphics are drawn by `src/ui.c`; the pages are in `src/menu.c` and the options and `tmnt.ini` in `src/options.c`.
 
 ### Fixes
 
@@ -160,10 +202,13 @@ Enter, B becomes Escape), so B opens the menu instead of attacking. Playing in D
       platform_sdl.c       the same with SDL2 (Linux)
       replay_main.c        the windowless replay tool
       rom.c                the only way the game data is read (European or American release)
+      menu.c ui.c          the menu (comic-book pages) and its software renderer (stb_truetype, stb_image in third_party/)
+      options.c            the list of options (editions, extras, keys...) and tmnt.ini
       ppu.c apu.c nmi.c    the NES hardware and the console's frame loop
       player/ enemies/     the player, the enemies and the bosses (one file per enemy or family)
       scenes/ stage_play/  cutscenes, level play, spawns, objects
       ram_map.h            names of the RAM variables
+    images/                screenshots of the menu for this file (the game's logo is blurred in them)
     tests/reference_game/  recorded inputs of the reference game and fingerprints of its original trace
     data/                  data that comes with the game: spawn_mask.txt, fonts/ and ui/ of the menu (read from the folder next to the executable)
     tools/                 formatting and tests; spawn_editor/ is the editor of the spawn mask
@@ -183,4 +228,4 @@ file), and the font Komika by Apostrophic Labs in `data/fonts/` (freeware, used 
 This is an unofficial, non-commercial fan project. It is not affiliated with, endorsed by or sponsored by Konami, Nickelodeon, Paramount or any owner of the
 Teenage Mutant Ninja Turtles trademarks and characters; all names and trademarks belong to their respective owners. The game's code, graphics, sounds and
 music are not distributed here: the port needs a copy of the game that you own, and it contains no data extracted from it. Please do not post links to ROMs,
-nor screenshots of the game, in issues or pull requests.
+nor screenshots of the game, in issues or pull requests. The screenshots of the menu in `images/` show none of it (the logo that the menu cuts from the ROM is blurred).

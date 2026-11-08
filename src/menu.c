@@ -101,6 +101,62 @@ void menu_open(int running) {
     focus_arg = 0;
 }
 
+static int logo_blur;
+
+void menu_set_logo_blur(int on) {
+    logo_blur = on;
+}
+
+/* A box blur on premultiplied colours (a transparent pixel does not bleed black), `passes` times, horizontal then vertical. */
+static void blur_rgba(unsigned char *rgba, int w, int h, int radius, int passes) {
+    float *a = (float *)malloc((size_t)w * (size_t)h * 4 * sizeof(float));
+    float *b = (float *)malloc((size_t)w * (size_t)h * 4 * sizeof(float));
+    if (!a || !b) {
+        free(a);
+        free(b);
+        return;
+    }
+    for (int i = 0; i < w * h; i++) {
+        float al = (float)rgba[i * 4 + 3] / 255.0f;
+        for (int c = 0; c < 3; c++) {
+            a[i * 4 + c] = (float)rgba[i * 4 + c] * al;
+        }
+        a[i * 4 + 3] = al * 255.0f;
+    }
+    for (int pass = 0; pass < passes * 2; pass++) {
+        int horizontal = (pass & 1) == 0;
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                float acc[4] = {0, 0, 0, 0};
+                for (int k = -radius; k <= radius; k++) {
+                    int sx = horizontal ? x + k : x, sy = horizontal ? y : y + k;
+                    if (sx >= 0 && sx < w && sy >= 0 && sy < h) {
+                        for (int c = 0; c < 4; c++) {
+                            acc[c] += a[((size_t)sy * (size_t)w + (size_t)sx) * 4 + (size_t)c];
+                        }
+                    }
+                }
+                for (int c = 0; c < 4; c++) {
+                    b[((size_t)y * (size_t)w + (size_t)x) * 4 + (size_t)c] = acc[c] / (float)(2 * radius + 1);
+                }
+            }
+        }
+        float *t = a;
+        a = b;
+        b = t;
+    }
+    for (int i = 0; i < w * h; i++) {
+        float al = a[i * 4 + 3];
+        for (int c = 0; c < 3; c++) {
+            float v = al > 0.5f ? a[i * 4 + c] / (al / 255.0f) : 0.0f;
+            rgba[i * 4 + c] = (unsigned char)(v < 0 ? 0 : v > 255 ? 255 : v);
+        }
+        rgba[i * 4 + 3] = (unsigned char)(al < 0 ? 0 : al > 255 ? 255 : al);
+    }
+    free(a);
+    free(b);
+}
+
 /* The logo is the tallest block of rows that are not black on the title screen; the black around it (reached from the edge of the cut) becomes transparent. */
 void menu_set_logo_picture(const uint32_t *pic) {
     int best_y0 = -1, best_h = 0, y = 0;
@@ -180,6 +236,9 @@ void menu_set_logo_picture(const uint32_t *pic) {
             o[2] = (unsigned char)c;
             o[3] = outside[yy * w + xx] ? 0 : 255;
         }
+    }
+    if (logo_blur) {
+        blur_rgba(rgba, w, h, 9, 3);
     }
     rom_logo = ui_image_from_rgba(rgba, w, h);
     free(rgba);

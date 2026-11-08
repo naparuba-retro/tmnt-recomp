@@ -661,15 +661,23 @@ static MenuAction menu_click(Ui *ui, int kind, int arg) {
     return menu_update(&in);
 }
 
-/* A keyboard that is not one: the code 100 + row is the default key of the first box of a row, the second box has none. */
+/* A keyboard that is not one (the codes 100 + row are the default first keys of the rows, 110 and 111 the second keys of B and Select): the names are those of
+ * the defaults of the Windows layer, so that the screenshot of the controls page looks like the real one. */
 static const char *test_key_name(int code) {
     static char n[16];
+    static const char *const names[8] = {"X", "Z", "TAB", "ENTER", "UP", "DOWN", "LEFT", "RIGHT"};
+    if (code >= 100 && code < 108) {
+        return names[code - 100];
+    }
+    if (code == 110 || code == 111) {
+        return code == 110 ? "W" : "RIGHT SHIFT";
+    }
     snprintf(n, sizeof n, "KEY %d", code);
     return n;
 }
 
 static int test_key_default(int row, int slot) {
-    return slot ? 0 : 100 + row;
+    return slot ? (row == 1 ? 110 : row == 2 ? 111 : 0) : 100 + row;
 }
 
 static const MenuKeys test_keys = {test_key_name, test_key_default};
@@ -935,6 +943,7 @@ static int menu_shots(const char *dir) {
             size_t got = fread(title, sizeof title[0], 256 * 240, tf);
             fclose(tf);
             if (got == 256 * 240) {
+                menu_set_logo_blur(getenv("TMNT_MENU_BLUR") != NULL);
                 menu_set_logo_picture(title);
             }
         }

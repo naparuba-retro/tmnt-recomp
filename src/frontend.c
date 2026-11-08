@@ -769,6 +769,11 @@ int main(int argc, char **argv) {
     }
     game_started = no_menu || start_level2 || pad_script_n > 0;
     if (!game_started) { /* the launcher: the menu on its first page, no game under it yet */
+        for (int i = 1; i < argc; i++) {
+            if (!strcmp(argv[i], "--blur-logo")) { /* screenshots: the game's logo, blurred beyond recognition */
+                menu_set_logo_blur(1);
+            }
+        }
         cut_title_logo(g);
         menu_open(0);
     }
