@@ -17,7 +17,8 @@
 
 /* Key presses since the previous platform_poll() (one event per key press, no auto-repeat). */
 typedef struct {
-    int quit;       /* window closed or Esc */
+    int quit;       /* window closed */
+    int menu;       /* Esc */
     int mute;       /* M */
     int pause;      /* P */
     int invincible; /* I */
@@ -41,6 +42,10 @@ int platform_audio_open(void);               /* 1 = sound available */
 void platform_poll(PlatformEvents *ev);      /* handles the window messages and fills `ev` */
 uint8_t platform_pad(void);                  /* NES pad: A=80 B=40 Select=20 Start=10 up=08 down=04 left=02 right=01 (0 when the window is not focused) */
 void platform_present(const uint32_t *argb); /* shows a 256x240 picture, 0xRRGGBB pixels */
+void platform_present_hd(const uint32_t *argb, int w, int h); /* shows a picture the size of the window (the menu), 0xRRGGBB pixels */
+void platform_window_size(int *w, int *h);                    /* the area of the window that the picture covers, in pixels */
+void platform_mouse(int *x, int *y,
+                    int *clicked); /* the cursor in that area (-1 if it is elsewhere); clicked: the left button was pressed since the last call */
 void platform_set_title(const char *title);
 void platform_wait_frame(void);                 /* paces the game at 60 frames per second (by the sound card when there is one) */
 void platform_audio_submit(const int16_t *pcm); /* SAMPLES_PER_FRAME mono 16-bit samples for the next frame */

@@ -63,4 +63,5 @@ tmnt_pokes*.txt
 tmnt_rewind*.txt
 tmnt_todo*.log
 tmnt_capture_*
+tmnt.ini
 __pycache__/

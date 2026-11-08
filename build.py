@@ -55,7 +55,7 @@ else:
             if sdl.returncode:
                 sys.exit("SDL2 not found (pkg-config sdl2): install libsdl2-dev, or use --replay-only")
             extra = sdl.stdout.split()
-        cmd = [cc] + flags + common + [os.path.join(src, m) for m in mains] + ["-o", os.path.join(out, exe)] + extra
+        cmd = [cc] + flags + common + [os.path.join(src, m) for m in mains] + ["-o", os.path.join(out, exe)] + extra + ["-lm"]
         rc = subprocess.run(cmd).returncode
         if rc:
             sys.exit(rc)

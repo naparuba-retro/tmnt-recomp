@@ -3,13 +3,16 @@
 #include <mmsystem.h>
 #include <xinput.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "platform.h"
 
 #define SCALE 3
 #define NBUF 4
 
-static BITMAPINFO bmi;
+static BITMAPINFO bmi, bmi_hd;
+static uint32_t *hd_pixels; /* the menu's picture (the size of the window), when it is shown */
+static int hd_w, hd_h, clicked;
 static HWND hwnd;
 static uint32_t screen[SCREEN_W * SCREEN_H];
 static PlatformEvents pending; /* key presses seen by the window procedure since the last platform_poll() */
@@ -32,13 +35,16 @@ static LRESULT CALLBACK wndproc(HWND h, UINT m, WPARAM w, LPARAM l) {
                 return 0;
             }
             return DefWindowProc(h, m, w, l);
+        case WM_LBUTTONDOWN:
+            clicked = 1;
+            return 0;
         case WM_KEYDOWN:
             if (l & 0x40000000) {
                 return 0; /* auto-repeat */
             }
             pending.any_key = 1;
             if (w == VK_ESCAPE) {
-                pending.quit = 1;
+                pending.menu = 1;
             } else if (w == 'M') {
                 pending.mute = 1;
             } else if (w == 'P') {
@@ -74,7 +80,11 @@ static LRESULT CALLBACK wndproc(HWND h, UINT m, WPARAM w, LPARAM l) {
             HDC dc = BeginPaint(h, &ps);
             RECT r;
             GetClientRect(h, &r);
-            StretchDIBits(dc, 0, 0, r.right, r.bottom, 0, 0, SCREEN_W, SCREEN_H, screen, &bmi, DIB_RGB_COLORS, SRCCOPY);
+            if (hd_w) {
+                StretchDIBits(dc, 0, 0, r.right, r.bottom, 0, 0, hd_w, hd_h, hd_pixels, &bmi_hd, DIB_RGB_COLORS, SRCCOPY);
+            } else {
+                StretchDIBits(dc, 0, 0, r.right, r.bottom, 0, 0, SCREEN_W, SCREEN_H, screen, &bmi, DIB_RGB_COLORS, SRCCOPY);
+            }
             EndPaint(h, &ps);
             return 0;
         }
@@ -259,7 +269,47 @@ uint8_t platform_pad(void) {
     return p;
 }
 
+void platform_present_hd(const uint32_t *argb, int width, int height) {
+    if (!hd_pixels || hd_w != width || hd_h != height) {
+        free(hd_pixels);
+        hd_pixels = (uint32_t *)malloc((size_t)width * (size_t)height * sizeof(uint32_t));
+        if (!hd_pixels) {
+            hd_w = 0;
+            return;
+        }
+        hd_w = width;
+        hd_h = height;
+        bmi_hd = bmi;
+        bmi_hd.bmiHeader.biWidth = width;
+        bmi_hd.bmiHeader.biHeight = -height;
+    }
+    memcpy(hd_pixels, argb, (size_t)width * (size_t)height * sizeof(uint32_t));
+    InvalidateRect(hwnd, NULL, FALSE);
+    UpdateWindow(hwnd);
+}
+
+void platform_window_size(int *width, int *height) {
+    RECT r;
+    GetClientRect(hwnd, &r);
+    *width = r.right > 0 ? r.right : 1;
+    *height = r.bottom > 0 ? r.bottom : 1;
+}
+
+void platform_mouse(int *x, int *y, int *click) {
+    POINT p;
+    RECT r;
+    *x = *y = -1;
+    if (GetForegroundWindow() == hwnd && GetCursorPos(&p) && ScreenToClient(hwnd, &p) && GetClientRect(hwnd, &r) && p.x >= 0 && p.y >= 0 && p.x < r.right &&
+        p.y < r.bottom) {
+        *x = p.x;
+        *y = p.y;
+    }
+    *click = clicked;
+    clicked = 0;
+}
+
 void platform_present(const uint32_t *argb) {
+    hd_w = 0; /* the game's picture again */
     memcpy(screen, argb, sizeof screen);
     InvalidateRect(hwnd, NULL, FALSE);
     UpdateWindow(hwnd);

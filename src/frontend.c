@@ -9,10 +9,13 @@
 #include "help_screen.h"
 #include "hitbox_view.h"
 #include "large_view.h"
+#include "menu.h"
 #include "nmi.h"
+#include "options.h"
 #include "platform.h"
 #include "ppu.h"
 #include "spawn_mask.h"
+#include "ui.h"
 
 #define TITLE "TMNT (Europe) - port C"
 
@@ -27,8 +30,12 @@ static const uint32_t PAL[64] = {
 
 static uint32_t screen[SCREEN_W * SCREEN_H];
 static uint8_t idx[SCREEN_W * SCREEN_H];
-static int paused, muted, frozen;
-static int invincible; /* key I or --invincible: the turtles' health is set back to the maximum (cheat) */
+static int paused, frozen;
+static Ui menu_ui;                       /* the menu is drawn here, the size of the window */
+static int game_started, quit_requested; /* a game is running under the menu / Quit game was chosen */
+static uint8_t menu_prev_pad;
+static char ini_path[1100];
+/* the cheat "invincible" (key I, --invincible or the menu) is the option OPT_INVINCIBLE: the turtles' health is set back to the maximum */
 
 /* snapshots: a full copy of the state (Game holds only RAM and registers) every 10 s of play, F9 goes back */
 #define NSNAP 12
@@ -135,7 +142,7 @@ static void capture(Game *g) {
  * allows replaying the game in the port without a window (tmnt_replay) */
 static FILE *input_log;
 static FILE *poke_log; /* tmnt_pokes.txt: "frame address value", format of build/pk_*.txt (replay in the port) */
-static int start_level2, level2_done;
+static int start_level2, level2_done, no_menu;
 static int start_level_n = 1; /* --level2: 1; --level3: 2; --level4: 3 (value of LevelNumber and AreaNumber of the street) */
 static uint8_t input_mask;
 
@@ -349,8 +356,11 @@ static void parse_options(int argc, char **argv) {
             start_level2 = 1;
             start_level_n = 5;
         }
+        if (!strcmp(argv[i], "--no-menu")) {
+            no_menu = 1; /* straight into the game, as before the menu existed */
+        }
         if (!strcmp(argv[i], "--invincible")) {
-            invincible = 1;
+            opt_set(OPT_INVINCIBLE, 1);
         }
         if (!strcmp(argv[i], "--hitbox")) {
             hitbox_set_enabled(1);
@@ -422,7 +432,7 @@ static void apply_start_level(Game *g) {
 }
 
 static void invincible_cheat(Game *g) {
-    if (!(invincible && (g->frame & 3) == 0 && g->ram[GameMode] == 4)) {
+    if (!(opt_get(OPT_INVINCIBLE) && (g->frame & 3) == 0 && g->ram[GameMode] == 4)) {
         return; /* cheat: health at the maximum every 4 frames, logged for the replay in Mesen */
     }
     if (!poke_log) {
@@ -475,11 +485,102 @@ static void run_game_frame(Game *g, int audio) {
     if ((int)g->frame / 60 != last_title_frame && g->frame % 60 == 0) {
         char t[240];
         last_title_frame = (int)g->frame / 60;
-        snprintf(t, sizeof t, "TMNT (Europe) - port C | mode %d.%d%s%s%s%s%s%s%s%s%s", g->ram[GameMode], g->ram[GameSubMode], muted ? " | muted" : "",
-                 audio ? "" : " | no sound card", fix_any_enabled() ? " | FIXES ON (J)" : "", fix_water_enabled() ? " | WATER FIXES (E)" : "",
-                 fix_camera_enabled() ? " | CAMERA FIX (C)" : "", spawn_mask_active() ? " | SPAWN MASK (S)" : "", fix_balance_enabled() ? " | BALANCE (R)" : "",
+        snprintf(t, sizeof t, "TMNT (Europe) - port C | mode %d.%d%s%s%s%s%s%s%s%s%s", g->ram[GameMode], g->ram[GameSubMode],
+                 opt_get(OPT_MUTE) ? " | muted" : "", audio ? "" : " | no sound card", fix_any_enabled() ? " | FIXES ON (J)" : "",
+                 fix_water_enabled() ? " | WATER FIXES (E)" : "", fix_camera_enabled() ? " | CAMERA FIX (C)" : "",
+                 spawn_mask_active() ? " | SPAWN MASK (S)" : "", fix_balance_enabled() ? " | BALANCE (R)" : "",
                  ppu_sprite_limit() > 8 ? " | NO FLICKER (F)" : "", large_view_enabled() ? " | LARGE VIEW (L)" : "");
         platform_set_title(t);
+    }
+}
+
+/* The folder "data" of the game (fonts, logo, spawn mask): next to the executable, one folder up, or in the current folder. */
+static int find_data_dir(char *out, size_t size) {
+    char exe_dir[1024];
+    platform_exe_dir(exe_dir, sizeof exe_dir);
+    const char *fmt[3] = {"%s/data", "%s/../data", "data"};
+    for (int i = 0; i < 3; i++) {
+        char probe[1300];
+        snprintf(out, size, fmt[i], exe_dir);
+        snprintf(probe, sizeof probe, "%s/fonts/KOMIKAHB.ttf", out);
+        FILE *f = fopen(probe, "rb");
+        if (f) {
+            fclose(f);
+            return 1;
+        }
+    }
+    snprintf(out, size, "%s/data", exe_dir);
+    return 0;
+}
+
+/* Where tmnt.ini lives: next to the executable when that folder can be written (or the file is already there), else in the user's own folder. */
+static void choose_ini_path(char *out, size_t size) {
+    char exe_dir[1024], probe[1200];
+    platform_exe_dir(exe_dir, sizeof exe_dir);
+    snprintf(out, size, "%s/tmnt.ini", exe_dir);
+    FILE *f = fopen(out, "r");
+    if (f) {
+        fclose(f);
+        return;
+    }
+    snprintf(probe, sizeof probe, "%s/tmnt.ini.probe", exe_dir);
+    f = fopen(probe, "w");
+    if (f) {
+        fclose(f);
+        remove(probe);
+        return;
+    }
+    const char *base = getenv("APPDATA");
+    char dir[1100];
+    if (base) {
+        snprintf(dir, sizeof dir, "%s/tmnt", base);
+    } else if (getenv("XDG_CONFIG_HOME")) {
+        snprintf(dir, sizeof dir, "%s/tmnt", getenv("XDG_CONFIG_HOME"));
+    } else if (getenv("HOME")) {
+        snprintf(dir, sizeof dir, "%s/.config/tmnt", getenv("HOME"));
+    } else {
+        return; /* nowhere: the file next to the executable, which will not be written */
+    }
+    platform_make_dir(dir);
+    snprintf(out, size, "%s/tmnt.ini", dir);
+}
+
+/* "PLAY" in the menu: a new game with the options as they are, at the level chosen. */
+static void start_new_game(Game *g) {
+    reset_game(g);
+    g->frame = 0;
+    frozen = 0;
+    paused = 0;
+    level2_done = 0;
+    start_level2 = opt_get(OPT_START_LEVEL) > 1;
+    start_level_n = opt_get(OPT_START_LEVEL) - 1;
+    game_started = 1;
+    platform_set_title(TITLE);
+}
+
+/* One frame of the menu: the pad and the mouse go to it, it is drawn over the frozen game and shown at the size of the window. */
+static void menu_frame(Game *g, const PlatformEvents *ev) {
+    int w, h;
+    platform_window_size(&w, &h);
+    ui_resize(&menu_ui, w, h);
+    uint8_t pad = platform_pad(), edge = (uint8_t)(pad & ~menu_prev_pad);
+    menu_prev_pad = pad;
+    MenuInput in = {0};
+    in.up = (edge & 0x08) != 0;
+    in.down = (edge & 0x04) != 0;
+    in.left = (edge & 0x02) != 0;
+    in.right = (edge & 0x01) != 0;
+    in.confirm = (edge & 0x90) != 0; /* A or Start */
+    in.back = (edge & 0x40) != 0;
+    in.escape = ev->menu;
+    platform_mouse(&in.mouse_x, &in.mouse_y, &in.clicked);
+    MenuAction a = menu_update(&in);
+    menu_draw(&menu_ui, game_started ? screen : NULL);
+    platform_present_hd(menu_ui.px, w, h);
+    if (a == MENU_NEW_GAME) {
+        start_new_game(g);
+    } else if (a == MENU_QUIT) {
+        quit_requested = 1;
     }
 }
 
@@ -489,7 +590,12 @@ int main(int argc, char **argv) {
         return 1;
     }
     reset_game(g);
+    choose_ini_path(ini_path, sizeof ini_path);
+    options_load(ini_path); /* what the player chose in the menu; the command line below comes after and wins */
     parse_options(argc, argv);
+    if (start_level2) {
+        opt_set(OPT_START_LEVEL, start_level_n + 1);
+    }
     { /* the spawn mask that comes with the game is always loaded (an absent one is an empty one); the key S, or --spawn-mask, switches it on */
         char exe_dir[1024], found[1100];
         platform_exe_dir(exe_dir, sizeof exe_dir);
@@ -513,20 +619,46 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (platform_init(invincible ? "TMNT (Europe) - port C - INVINCIBLE (I to disable)" : TITLE)) {
+    if (platform_init(opt_get(OPT_INVINCIBLE) ? "TMNT (Europe) - port C - INVINCIBLE (I to disable)" : TITLE)) {
         return 1;
     }
     int audio = platform_audio_open();
     static int16_t pcm[SAMPLES_PER_FRAME];
     g->frame = 0;
+    {
+        char data_dir[1200];
+        find_data_dir(data_dir, sizeof data_dir);
+        menu_init(data_dir, ini_path);
+    }
+    game_started = no_menu || start_level2 || pad_script_n > 0;
+    if (!game_started) { /* the launcher: the menu on its first page, no game under it yet */
+        menu_open(0);
+    }
     for (;;) {
         PlatformEvents ev;
         platform_poll(&ev);
         if (ev.quit) {
             break;
         }
+        if (menu_is_open()) {
+            menu_frame(g, &ev);
+            if (quit_requested) {
+                break;
+            }
+            platform_wait_frame();
+            if (audio) {
+                memset(pcm, 0, sizeof pcm);
+                platform_audio_submit(pcm);
+            }
+            continue;
+        }
+        if (ev.menu) { /* Esc: the menu over the frozen game */
+            menu_open(game_started);
+            menu_prev_pad = platform_pad();
+            continue;
+        }
         if (ev.mute) {
-            muted ^= 1;
+            opt_set(OPT_MUTE, !opt_get(OPT_MUTE));
         }
         if (ev.pause) {
             paused ^= 1;
@@ -571,8 +703,8 @@ int main(int argc, char **argv) {
                                                       : "TMNT (Europe) - port C | flicker as on the NES (F to remove it)");
         }
         if (ev.invincible) {
-            invincible ^= 1;
-            platform_set_title(invincible ? "TMNT (Europe) - port C - INVINCIBLE (I to disable)" : TITLE);
+            opt_set(OPT_INVINCIBLE, !opt_get(OPT_INVINCIBLE));
+            platform_set_title(opt_get(OPT_INVINCIBLE) ? "TMNT (Europe) - port C - INVINCIBLE (I to disable)" : TITLE);
         }
         if (ev.restart) {
             reset_game(g);
@@ -596,8 +728,12 @@ int main(int argc, char **argv) {
             } else {
                 apu_mix(g, pcm, SAMPLES_PER_FRAME);
             }
-            if (muted) {
+            if (opt_get(OPT_MUTE)) {
                 memset(pcm, 0, sizeof pcm);
+            } else if (opt_get(OPT_VOLUME) < 100) {
+                for (int i = 0; i < SAMPLES_PER_FRAME; i++) {
+                    pcm[i] = (int16_t)(pcm[i] * opt_get(OPT_VOLUME) / 100);
+                }
             }
             platform_audio_submit(pcm);
         }

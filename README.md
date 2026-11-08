@@ -78,7 +78,7 @@ tells you where to put the file. The ROM can also be given as an argument: `tmnt
 | R | switch the balance options on / off: more damage for Leonardo, Raphael and Michelangelo and a longer reach for Raphael (see `FIXES.md`) |
 | F | remove the sprite flicker (see below) |
 | L | large view: no random tiles at the top of the screen (see below) |
-| Esc | quit |
+| Esc | the menu: PLAY (edition, extras, level), SOUND, GRAPHICS, CONTROLS, and Quit game. Esc again goes back to the game. At start the menu is the launcher (`--no-menu` skips it) |
 
 The first game controller found works too: d-pad or left stick, A = jump, X or B = attack, Start, Back = Select, left trigger = rewind.
 
@@ -142,7 +142,7 @@ The Linux build runs on a Steam Deck (SteamOS already has SDL2, there is nothing
    left trigger = rewind).
 
 For now it works in **Game Mode only**. When it is started from Desktop Mode, Steam's desktop layout turns the controller into a keyboard (A becomes
-Enter, B becomes Escape), so B quits the game instead of attacking. Playing in Desktop Mode with the controller is not supported yet; the keyboard works there.
+Enter, B becomes Escape), so B opens the menu instead of attacking. Playing in Desktop Mode with the controller is not supported yet; the keyboard works there.
 
 ## Tests
 
@@ -165,7 +165,7 @@ Enter, B becomes Escape), so B quits the game instead of attacking. Playing in D
       scenes/ stage_play/  cutscenes, level play, spawns, objects
       ram_map.h            names of the RAM variables
     tests/reference_game/  recorded inputs of the reference game and fingerprints of its original trace
-    data/                  data that comes with the game (spawn_mask.txt, read from the folder next to the executable)
+    data/                  data that comes with the game: spawn_mask.txt, fonts/ and ui/ of the menu (read from the folder next to the executable)
     tools/                 formatting and tests; spawn_editor/ is the editor of the spawn mask
 
 Comments in the code give the address of the original 6502 routine each function comes from (for instance `B5 $8907` = bank 5, address `$8907`).
@@ -173,6 +173,10 @@ Comments in the code give the address of the original 6502 routine each function
 ## License
 
 MIT, see `LICENSE`. This license covers the code of this repository only.
+
+Third-party files that are part of the game's menu: `src/third_party/stb_truetype.h` and `stb_image.h` (Sean Barrett, public domain / MIT, the licence is at the end of each
+file), and the font Komika by Apostrophic Labs in `data/fonts/` (freeware, used unmodified, its licence is `KOMIKA-LICENSE.txt` next to it). The menu's settings are kept in
+`tmnt.ini`, next to the game (or in your user folder): only the values that differ from the defaults are written, and you can keep the file from one version to the next.
 
 ## Disclaimer
 

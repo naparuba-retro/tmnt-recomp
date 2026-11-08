@@ -13,7 +13,8 @@
 
 static SDL_Window *window;
 static SDL_Renderer *renderer;
-static SDL_Texture *texture;
+static SDL_Texture *texture, *hd_texture;
+static int hd_w, hd_h, hd_mode, click_pending;
 static SDL_AudioDeviceID audio_dev;
 static PlatformEvents pending;
 static uint64_t last_tick;
@@ -81,7 +82,7 @@ int platform_audio_open(void) {
 
 static SDL_GameController *get_controller(void);
 
-/* Escape quits, except when it comes with the pad's Start button: on a Steam Deck in desktop mode, Steam Input turns Start into an Escape key press
+/* Escape opens the menu, except when it comes with the pad's Start button: on a Steam Deck in desktop mode, Steam Input turns Start into an Escape key press
  * as well as the controller button. The Escape is held for a short while to see whether the button comes with it (in either order). */
 #define ESCAPE_HOLD_MS 100
 #define START_PAIR_MS 300
@@ -93,6 +94,8 @@ void platform_poll(PlatformEvents *ev) {
     while (SDL_PollEvent(&e)) {
         if (e.type == SDL_QUIT) {
             pending.quit = 1;
+        } else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+            click_pending = 1;
         } else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_START) {
             start_seen = 1;
             start_tick = SDL_GetTicks();
@@ -154,7 +157,7 @@ void platform_poll(PlatformEvents *ev) {
         escape_waiting = 0;
         Uint32 apart = start_tick > escape_tick ? start_tick - escape_tick : escape_tick - start_tick;
         if (!start_seen || apart > START_PAIR_MS) {
-            pending.quit = 1;
+            pending.menu = 1;
         }
     }
     SDL_GameController *c = get_controller();
@@ -258,7 +261,51 @@ uint8_t platform_pad(void) {
     return p;
 }
 
+void platform_present_hd(const uint32_t *argb, int w, int h) {
+    if (!hd_texture || hd_w != w || hd_h != h) {
+        if (hd_texture) {
+            SDL_DestroyTexture(hd_texture);
+        }
+        hd_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, w, h);
+        hd_w = w;
+        hd_h = h;
+    }
+    if (!hd_texture) {
+        return;
+    }
+    if (!hd_mode) {
+        SDL_RenderSetLogicalSize(renderer, 0, 0); /* the picture is the size of the window */
+        hd_mode = 1;
+    }
+    SDL_UpdateTexture(hd_texture, NULL, argb, w * (int)sizeof(uint32_t));
+    SDL_RenderClear(renderer);
+    SDL_RenderCopy(renderer, hd_texture, NULL, NULL);
+    SDL_RenderPresent(renderer);
+}
+
+void platform_window_size(int *w, int *h) {
+    SDL_GetRendererOutputSize(renderer, w, h);
+}
+
+void platform_mouse(int *x, int *y, int *click) {
+    int mx, my, ww, wh, ow, oh;
+    SDL_GetMouseState(&mx, &my);
+    SDL_GetWindowSize(window, &ww, &wh);
+    SDL_GetRendererOutputSize(renderer, &ow, &oh);
+    *x = *y = -1;
+    if (SDL_GetMouseFocus() == window && ww > 0 && wh > 0) { /* window units to pixels (they differ on a high-density screen) */
+        *x = mx * ow / ww;
+        *y = my * oh / wh;
+    }
+    *click = click_pending;
+    click_pending = 0;
+}
+
 void platform_present(const uint32_t *argb) {
+    if (hd_mode) {
+        SDL_RenderSetLogicalSize(renderer, SCREEN_W, SCREEN_H);
+        hd_mode = 0;
+    }
     SDL_UpdateTexture(texture, NULL, argb, SCREEN_W * (int)sizeof(uint32_t));
     SDL_RenderClear(renderer);
     SDL_RenderCopy(renderer, texture, NULL, NULL);

@@ -32,6 +32,9 @@
 #include "fixes.h"
 #include "enemy.h"
 #include "spawn_mask.h"
+#include "menu.h"
+#include "options.h"
+#include "ui.h"
 #include "nmi.h"
 #include "sound.h"
 #include "stage_play.h"
@@ -601,7 +604,193 @@ static void play_every_sound(Game *g) /* SNDALL=1 (with SNDDIFF=1) : plays each 
 }
 #endif
 
+/* Tests only: TMNT_MENU_SHOT=<folder>: draws the menu pages into BMP files (no window, no ROM) and leaves. TMNT_DATA_DIR = the folder "data" of the game. The size
+ * is TMNT_MENU_SIZE ("1280x720" by default). Used by tools/menu_check.sh. */
+static void write_bmp24(const char *name, const Ui *ui) {
+    FILE *f = fopen(name, "wb");
+    if (!f) {
+        return;
+    }
+    int w = ui->w, h = ui->h, row = (w * 3 + 3) & ~3;
+    uint32_t size = (uint32_t)(54 + row * h);
+    uint8_t head[54] = {'B', 'M'};
+    memcpy(head + 2, &size, 4);
+    head[10] = 54;
+    head[14] = 40;
+    memcpy(head + 18, &w, 4);
+    int neg = -h;
+    memcpy(head + 22, &neg, 4);
+    head[26] = 1;
+    head[28] = 24;
+    fwrite(head, 1, 54, f);
+    uint8_t *line = (uint8_t *)calloc((size_t)row, 1);
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            uint32_t c = ui->px[y * w + x];
+            line[x * 3] = (uint8_t)(c & 255);
+            line[x * 3 + 1] = (uint8_t)((c >> 8) & 255);
+            line[x * 3 + 2] = (uint8_t)((c >> 16) & 255);
+        }
+        fwrite(line, 1, (size_t)row, f);
+    }
+    free(line);
+    fclose(f);
+}
+
+/* The menu driven the way a player does: clicks, keys, and what it does to the options and to tmnt.ini. Returns 0 if all is as expected. */
+static int menu_failures;
+
+static void menu_expect(int ok, const char *what) {
+    printf("%s %s\n", ok ? "OK  " : "FAIL", what);
+    menu_failures += !ok;
+}
+
+static MenuAction menu_step(Ui *ui, MenuInput in) { /* a frame: drawn (so that the menu knows where its items are), then the input */
+    menu_draw(ui, NULL);
+    return menu_update(&in);
+}
+
+static MenuAction menu_click(Ui *ui, int kind, int arg) {
+    MenuInput in = {0};
+    menu_draw(ui, NULL);
+    if (!menu_item_centre(kind, arg, &in.mouse_x, &in.mouse_y)) {
+        menu_expect(0, "an item that should be on the page is not");
+        return MENU_NONE;
+    }
+    in.clicked = 1;
+    return menu_update(&in);
+}
+
+static int menu_logic_tests(const char *dir, Ui *ui) {
+    char ini[700];
+    snprintf(ini, sizeof ini, "%s/test.ini", dir);
+    remove(ini);
+    menu_init(getenv("TMNT_DATA_DIR") ? getenv("TMNT_DATA_DIR") : "data", ini);
+    menu_open(0);
+    menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1});
+    menu_click(ui, MENU_ITEM_EDITION, 1);
+    int all = 1;
+    for (int id = OPT_FIX_CEILING; id <= OPT_NO_FLICKER; id++) {
+        all &= opt_get((OptId)id);
+    }
+    menu_expect(all && options_edition_matches(1) && opt_get(OPT_EDITION) == 1, "a click on Whole Pizza switches its nine options on");
+    menu_click(ui, MENU_ITEM_OPTION, OPT_NO_FLICKER);
+    menu_expect(!opt_get(OPT_NO_FLICKER) && !options_edition_matches(1) && opt_get(OPT_EDITION) == 1, "a line switched off: the edition stays, as modified");
+    menu_click(ui, MENU_ITEM_EDITION, 0);
+    all = 0;
+    for (int id = OPT_FIX_CEILING; id <= OPT_NO_FLICKER; id++) {
+        all |= opt_get((OptId)id);
+    }
+    menu_expect(!all && options_edition_matches(0) && opt_get(OPT_EDITION) == 0, "a click on Original switches everything off");
+    FILE *f = fopen(ini, "r");
+    char text[2000] = "";
+    if (f) {
+        size_t n = fread(text, 1, sizeof text - 1, f);
+        text[n] = 0;
+        fclose(f);
+    }
+    menu_expect(f != NULL && !strstr(text, "smart_camera") && !strstr(text, "edition="),
+                "tmnt.ini holds only what differs from the defaults (everything is default again)");
+    menu_click(ui, MENU_ITEM_EDITION, 1);
+    f = fopen(ini, "r");
+    if (f) {
+        size_t n = fread(text, 1, sizeof text - 1, f);
+        text[n] = 0;
+        fclose(f);
+    }
+    menu_expect(strstr(text, "smart_camera=1") && strstr(text, "large_view=1") && strstr(text, "edition=1"),
+                "tmnt.ini now holds the nine options and the edition");
+    f = fopen(ini, "a"); /* a key of another version, and a comment of the player */
+    fprintf(f, "future_key=7\n; my comment\n");
+    fclose(f);
+    menu_click(ui, MENU_ITEM_OPTION, OPT_FIX_CAMERA);
+    f = fopen(ini, "r");
+    size_t n = fread(text, 1, sizeof text - 1, f);
+    text[n] = 0;
+    fclose(f);
+    menu_expect(!strstr(text, "smart_camera") && strstr(text, "future_key=7") && strstr(text, "; my comment"),
+                "a value back to its default leaves the file; unknown keys and comments stay");
+    /* a new version reads an old file: missing keys are defaults, unknown ones are ignored, bad values too */
+    for (int id = 0; id < OPT_COUNT; id++) {
+        opt_set((OptId)id, opt_info((OptId)id)->def);
+    }
+    f = fopen(ini, "w");
+    fprintf(f, "[whole_pizza]\nraph_reach=1\nlarge_view=banana\n[sound]\nvolume=40\n[old_section]\nfoo=bar\n");
+    fclose(f);
+    options_load(ini);
+    menu_expect(opt_get(OPT_BAL_REACH) == 1 && opt_get(OPT_LARGE_VIEW) == 0 && opt_get(OPT_VOLUME) == 40 && opt_get(OPT_FIX_CAMERA) == 0,
+                "an old tmnt.ini is read: known keys applied, bad and unknown ones ignored, the rest default");
+    /* the sound page: a slider */
+    menu_select_page(1);
+    menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1});
+    MenuInput in = {0};
+    menu_draw(ui, NULL);
+    menu_item_centre(MENU_ITEM_OPTION, OPT_VOLUME, &in.mouse_x, &in.mouse_y);
+    in.clicked = 1;
+    menu_update(&in);
+    int v = opt_get(OPT_VOLUME);
+    menu_expect(v >= 0 && v <= 100 && v != 40, "a click on the volume slider sets the volume");
+    in = (MenuInput){.mouse_x = -1, .mouse_y = -1, .left = 1};
+    menu_step(ui, in);
+    menu_expect(opt_get(OPT_VOLUME) == (v - 5 < 0 ? 0 : v - 5), "left on the slider lowers the volume by 5");
+    /* the level, play, resume, quit */
+    menu_select_page(0);
+    menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1});
+    menu_click(ui, MENU_ITEM_LEVEL, 3);
+    menu_expect(opt_get(OPT_START_LEVEL) == 3, "a click on a level chooses it");
+    menu_expect(menu_click(ui, MENU_ITEM_RESUME, 0) == MENU_NONE && menu_is_open(), "RESUME does nothing while no game runs");
+    menu_click(ui, MENU_ITEM_QUIT, 0);
+    menu_expect(menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1, .escape = 1}) == MENU_NONE && menu_is_open(), "Esc cancels the quit question");
+    menu_click(ui, MENU_ITEM_QUIT, 0);
+    menu_expect(menu_click(ui, MENU_ITEM_YES, 0) == MENU_QUIT, "Quit game, then Yes, quits");
+    menu_open(1);
+    menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1});
+    menu_expect(menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1, .escape = 1}) == MENU_RESUME && !menu_is_open(), "Esc resumes a running game");
+    menu_open(1);
+    menu_expect(menu_click(ui, MENU_ITEM_PLAY, 0) == MENU_NEW_GAME && !menu_is_open(), "PLAY starts a new game");
+    remove(ini);
+    return menu_failures ? 1 : 0;
+}
+
+static int menu_shots(const char *dir) {
+    const char *data = getenv("TMNT_DATA_DIR") ? getenv("TMNT_DATA_DIR") : "data";
+    int w = 1280, h = 720;
+    if (getenv("TMNT_MENU_SIZE")) {
+        sscanf(getenv("TMNT_MENU_SIZE"), "%dx%d", &w, &h);
+    }
+    menu_init(data, NULL);
+    if (getenv("TMNT_MENU_EDITION")) { /* to look at the page with an edition chosen (and one line changed with TMNT_MENU_MODIFIED) */
+        options_apply_edition(atoi(getenv("TMNT_MENU_EDITION")));
+        if (getenv("TMNT_MENU_MODIFIED")) {
+            opt_set_user(OPT_NO_FLICKER, 0);
+        }
+    }
+    static uint32_t picture[256 * 240];
+    for (int i = 0; i < 256 * 240; i++) { /* a stand-in for the game's picture */
+        picture[i] = (uint32_t)(((i % 256) / 4) << 16 | ((i / 256) / 3) << 8 | 0x60);
+    }
+    Ui ui = {0};
+    ui_resize(&ui, w, h);
+    static const char *const names[] = {"play", "sound", "graphics", "controls"};
+    for (int p = 0; p < 4; p++) {
+        menu_open(p == 0 ? 0 : 1);
+        menu_select_page(p);
+        MenuInput none = {0};
+        none.mouse_x = none.mouse_y = -1;
+        menu_draw(&ui, p == 0 ? NULL : picture); /* a first frame records where the items are */
+        menu_update(&none);
+        menu_draw(&ui, p == 0 ? NULL : picture);
+        char name[600];
+        snprintf(name, sizeof name, "%s/menu_%s.bmp", dir, names[p]);
+        write_bmp24(name, &ui);
+    }
+    return getenv("TMNT_MENU_EDITION") ? 0 : menu_logic_tests(dir, &ui);
+}
+
 int main(int argc, char **argv) {
+    if (getenv("TMNT_MENU_SHOT")) {
+        return menu_shots(getenv("TMNT_MENU_SHOT"));
+    }
     if (getenv("WATCHDOG")) {
         diag_start_watchdog((int)parse_number(getenv("WATCHDOG"), "WATCHDOG"));
     }
