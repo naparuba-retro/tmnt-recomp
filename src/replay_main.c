@@ -661,11 +661,25 @@ static MenuAction menu_click(Ui *ui, int kind, int arg) {
     return menu_update(&in);
 }
 
+/* A keyboard that is not one: the code 100 + row is the default key of the first box of a row, the second box has none. */
+static const char *test_key_name(int code) {
+    static char n[16];
+    snprintf(n, sizeof n, "KEY %d", code);
+    return n;
+}
+
+static int test_key_default(int row, int slot) {
+    return slot ? 0 : 100 + row;
+}
+
+static const MenuKeys test_keys = {test_key_name, test_key_default};
+
 static int menu_logic_tests(const char *dir, Ui *ui) {
     char ini[700];
     snprintf(ini, sizeof ini, "%s/test.ini", dir);
     remove(ini);
     menu_init(getenv("TMNT_DATA_DIR") ? getenv("TMNT_DATA_DIR") : "data", ini);
+    menu_set_keys(&test_keys);
     menu_open(0);
     menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1});
     menu_click(ui, MENU_ITEM_EDITION, 1);
@@ -870,6 +884,38 @@ static int menu_logic_tests(const char *dir, Ui *ui) {
         menu_expect(opt_get(OPT_INVINCIBLE) != before, "a click on its tick switches it");
         opt_set(OPT_INVINCIBLE, 0);
     }
+    { /* the controls page: choosing a key */
+        menu_select_page(3);
+        menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1});
+        menu_click(ui, MENU_ITEM_KEY, 2); /* the first box of the row B */
+        menu_expect(menu_capturing() == 2, "a click on a key box waits for a key");
+        menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1, .escape = 1});
+        menu_expect(menu_capturing() < 0 && menu_is_open() && opt_get((OptId)(OPT_KEY_FIRST + 2)) == 0,
+                    "Esc gives up: nothing changed and the menu stays open");
+        menu_click(ui, MENU_ITEM_KEY, 2);
+        menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1, .key = 65});
+        menu_expect(menu_capturing() < 0 && opt_get((OptId)(OPT_KEY_FIRST + 2)) == 65, "the next key is the new key of the box");
+        menu_click(ui, MENU_ITEM_KEY, 0); /* the first box of the row A, whose default is 100 */
+        menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1, .key = 65});
+        menu_expect(opt_get((OptId)(OPT_KEY_FIRST + 0)) == 65 && opt_get((OptId)(OPT_KEY_FIRST + 2)) == -1, "a key that another box has is taken from it");
+        menu_click(ui, MENU_ITEM_KEY, 0);
+        menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1, .key = 100});
+        menu_expect(opt_get((OptId)(OPT_KEY_FIRST + 0)) == 0, "choosing the default key of a box stores nothing");
+        FILE *kf = fopen(ini, "r");
+        char kt[2000] = "";
+        if (kf) {
+            size_t kn = fread(kt, 1, sizeof kt - 1, kf);
+            kt[kn] = 0;
+            fclose(kf);
+        }
+        menu_expect(strstr(kt, "key_b_1=-1") && !strstr(kt, "key_a_1"), "tmnt.ini holds the changed keys only");
+        menu_click(ui, MENU_ITEM_RESET, 0);
+        int back = 1;
+        for (int i = 0; i < 16; i++) {
+            back &= opt_get((OptId)(OPT_KEY_FIRST + i)) == 0;
+        }
+        menu_expect(back, "RESET KEYS gives every default key back");
+    }
     remove(ini);
     return menu_failures ? 1 : 0;
 }
@@ -881,6 +927,7 @@ static int menu_shots(const char *dir) {
         sscanf(getenv("TMNT_MENU_SIZE"), "%dx%d", &w, &h);
     }
     menu_init(data, NULL);
+    menu_set_keys(&test_keys);
     if (getenv("TMNT_MENU_EDITION")) { /* to look at the page with an edition chosen (and one line changed with TMNT_MENU_MODIFIED) */
         options_apply_edition(atoi(getenv("TMNT_MENU_EDITION")));
         if (getenv("TMNT_MENU_MODIFIED")) {

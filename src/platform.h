@@ -52,7 +52,13 @@ void platform_window_size(int *w, int *h);                    /* the area of the
 void platform_mouse(
     int *x, int *y, int *clicked,
     int *down); /* the cursor in that area (-1 if it is elsewhere); clicked: the left button was pressed since the last call; down: it is held now */
-void platform_set_fullscreen(int on);    /* the window covers the whole screen (no border), or goes back to its place */
+/* The keyboard: each pad button (NES bit 7..0) has two keys. A key code is a number of the platform layer (never 0; Esc is not a pad key) that is saved in tmnt.ini
+ * as it is, so a file does not carry from Windows to Linux. */
+int platform_default_key(int bit, int slot);        /* the key that the button has without any choice of the player (0: none) */
+void platform_set_key(int bit, int slot, int code); /* 0 = no key */
+const char *platform_key_name(int code);            /* in capitals, for the menu */
+int platform_capture_key(void);                     /* the last key pressed since the previous call (0 if none), whatever it does in the game; not Esc */
+void platform_set_fullscreen(int on);               /* the window covers the whole screen (no border), or goes back to its place */
 void platform_set_integer_scale(int on); /* the game's picture is shown at a whole multiple of 256x240, centred, with black bars (0: it fills the window) */
 void platform_set_title(const char *title);
 void platform_wait_frame(void);                 /* paces the game at 60 frames per second (by the sound card when there is one) */

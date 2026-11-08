@@ -517,8 +517,25 @@ static void count_fps(void) {
     draw_fps(shown);
 }
 
-/* The display options (menu or F11) reach the window. */
+/* What the menu needs to show and choose the keys. */
+static const char *keys_name(int code) {
+    return platform_key_name(code);
+}
+
+static int keys_default(int row, int slot) {
+    return platform_default_key(7 - row, slot);
+}
+
+static const MenuKeys menu_keys = {keys_name, keys_default};
+
+/* The display options (menu or F11) reach the window, and the keys of the pad (menu) the keyboard. */
 static void apply_display_options(void) {
+    for (int bit = 0; bit < 8; bit++) {
+        for (int slot = 0; slot < 2; slot++) {
+            int v = opt_get(OPT_KEY(bit, slot));
+            platform_set_key(bit, slot, v > 0 ? v : v < 0 ? 0 : platform_default_key(bit, slot));
+        }
+    }
     static int fullscreen = -1, integer = -1;
     if (fullscreen != opt_get(OPT_FULLSCREEN)) {
         fullscreen = opt_get(OPT_FULLSCREEN);
@@ -646,6 +663,7 @@ static void menu_frame(Game *g, const PlatformEvents *ev) {
     in.tab_prev = ev->tab_prev;
     in.tab_next = ev->tab_next;
     platform_mouse(&in.mouse_x, &in.mouse_y, &in.clicked, &in.mouse_down);
+    in.key = platform_capture_key();
     MenuAction a = menu_update(&in);
     menu_draw(&menu_ui, game_started ? screen : NULL);
     platform_present_hd(menu_ui.px, w, h);
@@ -704,6 +722,7 @@ int main(int argc, char **argv) {
         char data_dir[1200];
         find_data_dir(data_dir, sizeof data_dir);
         menu_init(data_dir, ini_path);
+        menu_set_keys(&menu_keys);
     }
     game_started = no_menu || start_level2 || pad_script_n > 0;
     if (!game_started) { /* the launcher: the menu on its first page, no game under it yet */

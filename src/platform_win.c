@@ -12,31 +12,107 @@
 
 static unsigned char tap_latch[8]; /* per pad bit: frames left of a key press that was too short to be seen (key down and up in the same instant) */
 
-/* The pad bit of a key, or -1. */
-static int key_pad_bit(WPARAM vk) {
-    switch (vk) {
-        case 'X':
-            return 7;
-        case 'Z':
-        case 'W':
-            return 6;
-        case VK_TAB:
-        case VK_RSHIFT:
-            return 5;
-        case VK_RETURN:
-            return 4;
-        case VK_UP:
-            return 3;
-        case VK_DOWN:
-            return 2;
-        case VK_LEFT:
-            return 1;
-        case VK_RIGHT:
-            return 0;
-        default:
-            return -1;
-    }
+/* The keys of the pad buttons: two per button (a VK_ code, 0 = none). The defaults are those of the original port. */
+static int key_bind[8][2] = {{VK_RIGHT, 0}, {VK_LEFT, 0}, {VK_DOWN, 0}, {VK_UP, 0}, {VK_RETURN, 0}, {VK_TAB, VK_RSHIFT}, {'Z', 'W'}, {'X', 0}};
+static int captured_key;
+
+int platform_default_key(int bit, int slot) { /* W: the key at the QWERTY Z position on an AZERTY keyboard */
+    static const int def[8][2] = {{VK_RIGHT, 0}, {VK_LEFT, 0}, {VK_DOWN, 0}, {VK_UP, 0}, {VK_RETURN, 0}, {VK_TAB, VK_RSHIFT}, {'Z', 'W'}, {'X', 0}};
+    return def[bit & 7][slot & 1];
 }
+
+void platform_set_key(int bit, int slot, int code) {
+    key_bind[bit & 7][slot & 1] = code;
+}
+
+/* The pad bit of a key, or -1. */
+static int key_pad_bit(int vk) {
+    for (int bit = 0; bit < 8; bit++) {
+        if (vk && (key_bind[bit][0] == vk || key_bind[bit][1] == vk)) {
+            return bit;
+        }
+    }
+    return -1;
+}
+
+/* The key of a WM_KEYDOWN, with the left and the right Shift and Ctrl told apart. */
+static int key_code(WPARAM w, LPARAM l) {
+    if (w == VK_SHIFT) {
+        return (int)MapVirtualKey((UINT)((l >> 16) & 0xFF), MAPVK_VSC_TO_VK_EX);
+    }
+    if (w == VK_CONTROL) {
+        return (l & 0x01000000) ? VK_RCONTROL : VK_LCONTROL;
+    }
+    return (int)w;
+}
+
+const char *platform_key_name(int code) {
+    static char name[64];
+    static const struct {
+        int vk;
+        const char *name;
+    } fixed[] = {{VK_UP, "UP"},
+                 {VK_DOWN, "DOWN"},
+                 {VK_LEFT, "LEFT"},
+                 {VK_RIGHT, "RIGHT"},
+                 {VK_RETURN, "ENTER"},
+                 {VK_TAB, "TAB"},
+                 {VK_SPACE, "SPACE"},
+                 {VK_BACK, "BACKSPACE"},
+                 {VK_LSHIFT, "LEFT SHIFT"},
+                 {VK_RSHIFT, "RIGHT SHIFT"},
+                 {VK_LCONTROL, "LEFT CTRL"},
+                 {VK_RCONTROL, "RIGHT CTRL"},
+                 {VK_INSERT, "INSERT"},
+                 {VK_DELETE, "DELETE"},
+                 {VK_HOME, "HOME"},
+                 {VK_END, "END"},
+                 {VK_PRIOR, "PAGE UP"},
+                 {VK_NEXT, "PAGE DOWN"},
+                 {VK_CAPITAL, "CAPS LOCK"}};
+    for (size_t i = 0; i < sizeof fixed / sizeof fixed[0]; i++) {
+        if (fixed[i].vk == code) {
+            return fixed[i].name;
+        }
+    }
+    if ((code >= '0' && code <= '9') || (code >= 'A' && code <= 'Z')) {
+        name[0] = (char)code;
+        name[1] = 0;
+        return name;
+    }
+    if (code >= VK_F1 && code <= VK_F12) {
+        snprintf(name, sizeof name, "F%d", code - VK_F1 + 1);
+        return name;
+    }
+    if (code >= VK_NUMPAD0 && code <= VK_NUMPAD9) {
+        snprintf(name, sizeof name, "NUM %d", code - VK_NUMPAD0);
+        return name;
+    }
+    UINT sc = MapVirtualKey((UINT)code, MAPVK_VK_TO_VSC);
+    char text[48] = "";
+    if (GetKeyNameTextA((LONG)(sc << 16), text, sizeof text) > 0) {
+        int ok = 1;
+        size_t n = 0;
+        for (; text[n] && n + 1 < sizeof name; n++) {
+            unsigned char c = (unsigned char)text[n];
+            ok &= c >= 32 && c < 127;
+            name[n] = (char)(c >= 'a' && c <= 'z' ? c - 32 : c);
+        }
+        name[n] = 0;
+        if (ok && n > 0) {
+            return name;
+        }
+    }
+    snprintf(name, sizeof name, "KEY %d", code);
+    return name;
+}
+
+int platform_capture_key(void) {
+    int k = captured_key;
+    captured_key = 0;
+    return k;
+}
+
 static BITMAPINFO bmi, bmi_hd;
 static uint32_t *hd_pixels; /* the menu's picture (the size of the window), when it is shown */
 static int hd_w, hd_h, clicked, integer_scale, is_fullscreen;
@@ -70,8 +146,16 @@ static LRESULT CALLBACK wndproc(HWND h, UINT m, WPARAM w, LPARAM l) {
             if (l & 0x40000000) {
                 return 0; /* auto-repeat */
             }
-            if (key_pad_bit(w) >= 0) {
-                tap_latch[key_pad_bit(w)] = 3; /* a very short tap (down and up delivered together) is still three frames of the pad */
+            {
+                int code = key_code(w, l), bit = key_pad_bit(code);
+                if (w != VK_ESCAPE) {
+                    captured_key = code;
+                }
+                if (bit >= 0) {
+                    tap_latch[bit] = 3; /* a very short tap (down and up delivered together) is still three frames of the pad */
+                    pending.any_key = 1;
+                    return 0; /* a key that the pad uses is not a shortcut */
+                }
             }
             pending.any_key = 1;
             if (w == VK_ESCAPE) {
@@ -115,12 +199,21 @@ static LRESULT CALLBACK wndproc(HWND h, UINT m, WPARAM w, LPARAM l) {
             GetClientRect(h, &r);
             if (hd_w) {
                 StretchDIBits(dc, 0, 0, r.right, r.bottom, 0, 0, hd_w, hd_h, hd_pixels, &bmi_hd, DIB_RGB_COLORS, SRCCOPY);
-            } else if (integer_scale) { /* a whole multiple of the picture, centred, black around */
-                int k = r.right / SCREEN_W < r.bottom / SCREEN_H ? r.right / SCREEN_W : r.bottom / SCREEN_H;
-                if (k < 1) {
-                    k = 1;
+            } else { /* the proportions are always kept: the picture is centred with black bars, at a whole multiple of its size if asked */
+                int pw, ph;
+                if (integer_scale) {
+                    int k = r.right / SCREEN_W < r.bottom / SCREEN_H ? r.right / SCREEN_W : r.bottom / SCREEN_H;
+                    k = k < 1 ? 1 : k;
+                    pw = SCREEN_W * k;
+                    ph = SCREEN_H * k;
+                } else if (r.right * SCREEN_H < r.bottom * SCREEN_W) { /* the window is narrower than the picture: its width sets the size */
+                    pw = r.right;
+                    ph = r.right * SCREEN_H / SCREEN_W;
+                } else {
+                    ph = r.bottom;
+                    pw = r.bottom * SCREEN_W / SCREEN_H;
                 }
-                int pw = SCREEN_W * k, ph = SCREEN_H * k, x0 = (r.right - pw) / 2, y0 = (r.bottom - ph) / 2;
+                int x0 = (r.right - pw) / 2, y0 = (r.bottom - ph) / 2;
                 HBRUSH black = (HBRUSH)GetStockObject(BLACK_BRUSH);
                 RECT bar[4] = {
                     {0, 0, r.right, y0 > 0 ? y0 : 0}, {0, y0 + ph, r.right, r.bottom}, {0, 0, x0 > 0 ? x0 : 0, r.bottom}, {x0 + pw, 0, r.right, r.bottom}};
@@ -128,8 +221,6 @@ static LRESULT CALLBACK wndproc(HWND h, UINT m, WPARAM w, LPARAM l) {
                     FillRect(dc, &bar[i], black);
                 }
                 StretchDIBits(dc, x0, y0, pw, ph, 0, 0, SCREEN_W, SCREEN_H, screen, &bmi, DIB_RGB_COLORS, SRCCOPY);
-            } else {
-                StretchDIBits(dc, 0, 0, r.right, r.bottom, 0, 0, SCREEN_W, SCREEN_H, screen, &bmi, DIB_RGB_COLORS, SRCCOPY);
             }
             EndPaint(h, &ps);
             return 0;
@@ -303,29 +394,10 @@ uint8_t platform_pad(void) {
     }
 #define K(vk) (GetAsyncKeyState(vk) & 0x8000)
     uint8_t p = 0;
-    if (K('X')) {
-        p |= 0x80;
-    }
-    if (K('Z') || K('W')) { /* W: the key at the QWERTY Z position on an AZERTY keyboard */
-        p |= 0x40;
-    }
-    if (K(VK_TAB) || K(VK_RSHIFT)) {
-        p |= 0x20;
-    }
-    if (K(VK_RETURN)) {
-        p |= 0x10;
-    }
-    if (K(VK_UP)) {
-        p |= 0x08;
-    }
-    if (K(VK_DOWN)) {
-        p |= 0x04;
-    }
-    if (K(VK_LEFT)) {
-        p |= 0x02;
-    }
-    if (K(VK_RIGHT)) {
-        p |= 0x01;
+    for (int bit = 0; bit < 8; bit++) {
+        if ((key_bind[bit][0] && K(key_bind[bit][0])) || (key_bind[bit][1] && K(key_bind[bit][1]))) {
+            p |= (uint8_t)(1 << bit);
+        }
     }
     for (int bit = 0; bit < 8; bit++) { /* the taps that were too short to be seen last for three frames */
         if (tap_latch[bit]) {

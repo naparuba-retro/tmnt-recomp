@@ -28,8 +28,15 @@ typedef enum {
     OPT_FULLSCREEN,
     OPT_INTEGER_SCALE,
     OPT_SHOW_FPS,
+    /* the keyboard: two keys for each pad button, in the order A, B, Select, Start, Up, Down, Left, Right (OPT_KEY). 0 = the default key of the platform,
+     * -1 = no key, otherwise the key code of the platform layer (platform.h) */
+    OPT_KEY_FIRST,
+    OPT_KEY_LAST = OPT_KEY_FIRST + 15,
     OPT_COUNT
 } OptId;
+
+/* The option of the key `slot` (0 or 1) of a pad button given by its NES bit (A = 7 ... Right = 0). */
+#define OPT_KEY(bit, slot) ((OptId)(OPT_KEY_FIRST + (7 - (bit)) * 2 + (slot)))
 
 typedef struct {
     const char *key, *section, *label, *description;

@@ -41,6 +41,10 @@ int platform_init(const char *title) {
         fprintf(stderr, "SDL_CreateTexture: %s\n", SDL_GetError());
         return 1;
     }
+    for (int bit = 0; bit < 8; bit++) {
+        key_bind[bit][0] = platform_default_key(bit, 0);
+        key_bind[bit][1] = platform_default_key(bit, 1);
+    }
     last_tick = SDL_GetPerformanceCounter();
     return 0;
 }
@@ -88,6 +92,58 @@ static SDL_GameController *get_controller(void);
 #define ESCAPE_HOLD_MS 100
 #define START_PAIR_MS 300
 
+/* The keys of the pad buttons: two per button (an SDL scancode, 0 = none). */
+static int key_bind[8][2];
+static int captured_key;
+
+int platform_default_key(int bit, int slot) { /* the labels Z and W: B is at the Z position of a QWERTY keyboard and of an AZERTY one */
+    switch (bit) {
+        case 7:
+            return slot ? 0 : (int)SDL_GetScancodeFromKey(SDLK_x);
+        case 6:
+            return (int)SDL_GetScancodeFromKey(slot ? SDLK_w : SDLK_z);
+        case 5:
+            return slot ? SDL_SCANCODE_RSHIFT : SDL_SCANCODE_TAB;
+        case 4:
+            return slot ? 0 : SDL_SCANCODE_RETURN;
+        case 3:
+            return slot ? 0 : SDL_SCANCODE_UP;
+        case 2:
+            return slot ? 0 : SDL_SCANCODE_DOWN;
+        case 1:
+            return slot ? 0 : SDL_SCANCODE_LEFT;
+        default:
+            return slot ? 0 : SDL_SCANCODE_RIGHT;
+    }
+}
+
+void platform_set_key(int bit, int slot, int code) {
+    key_bind[bit & 7][slot & 1] = code;
+}
+
+const char *platform_key_name(int code) {
+    static char name[64];
+    const char *n = SDL_GetScancodeName((SDL_Scancode)code);
+    size_t len = 0;
+    int ok = n && n[0];
+    for (; ok && n[len] && len + 1 < sizeof name; len++) {
+        unsigned char c = (unsigned char)n[len];
+        ok &= c >= 32 && c < 127;
+        name[len] = (char)(c >= 'a' && c <= 'z' ? c - 32 : c);
+    }
+    name[len] = 0;
+    if (!ok || !len) {
+        snprintf(name, sizeof name, "KEY %d", code);
+    }
+    return name;
+}
+
+int platform_capture_key(void) {
+    int k = captured_key;
+    captured_key = 0;
+    return k;
+}
+
 void platform_poll(PlatformEvents *ev) {
     static int l2_was, escape_waiting, start_seen;
     static Uint32 escape_tick, start_tick;
@@ -110,39 +166,18 @@ void platform_poll(PlatformEvents *ev) {
         } else if (e.type == SDL_KEYDOWN && !e.key.repeat) {
             pending.any_key = 1;
             {
-                int bit = -1; /* the pad bit of the key, to keep a very short tap for three frames */
-                switch (e.key.keysym.sym) {
-                    case SDLK_x:
-                        bit = 7;
-                        break;
-                    case SDLK_z:
-                    case SDLK_w:
-                        bit = 6;
-                        break;
-                    case SDLK_TAB:
-                    case SDLK_RSHIFT:
-                        bit = 5;
-                        break;
-                    case SDLK_RETURN:
-                        bit = 4;
-                        break;
-                    case SDLK_UP:
-                        bit = 3;
-                        break;
-                    case SDLK_DOWN:
-                        bit = 2;
-                        break;
-                    case SDLK_LEFT:
-                        bit = 1;
-                        break;
-                    case SDLK_RIGHT:
-                        bit = 0;
-                        break;
-                    default:
-                        break;
+                int code = (int)e.key.keysym.scancode, bit = -1; /* the pad bit of the key, to keep a very short tap for three frames */
+                for (int b = 0; b < 8 && bit < 0; b++) {
+                    if (code && (key_bind[b][0] == code || key_bind[b][1] == code)) {
+                        bit = b;
+                    }
+                }
+                if (e.key.keysym.scancode != SDL_SCANCODE_ESCAPE) {
+                    captured_key = code;
                 }
                 if (bit >= 0) {
                     tap_latch[bit] = 3;
+                    continue; /* a key that the pad uses is not a shortcut */
                 }
             }
             switch (e.key.keysym.sym) {
@@ -274,29 +309,10 @@ static uint8_t controller_pad(void) {
 uint8_t platform_pad(void) {
     const uint8_t *k = SDL_GetKeyboardState(NULL);
     uint8_t p = 0;
-    if (k[SDL_GetScancodeFromKey(SDLK_x)] || k[SDL_SCANCODE_X]) {
-        p |= 0x80;
-    }
-    if (k[SDL_GetScancodeFromKey(SDLK_z)] || k[SDL_GetScancodeFromKey(SDLK_w)] || k[SDL_SCANCODE_Z]) {
-        p |= 0x40;
-    }
-    if (k[SDL_SCANCODE_TAB] || k[SDL_SCANCODE_RSHIFT]) {
-        p |= 0x20;
-    }
-    if (k[SDL_SCANCODE_RETURN]) {
-        p |= 0x10;
-    }
-    if (k[SDL_SCANCODE_UP]) {
-        p |= 0x08;
-    }
-    if (k[SDL_SCANCODE_DOWN]) {
-        p |= 0x04;
-    }
-    if (k[SDL_SCANCODE_LEFT]) {
-        p |= 0x02;
-    }
-    if (k[SDL_SCANCODE_RIGHT]) {
-        p |= 0x01;
+    for (int bit = 0; bit < 8; bit++) {
+        if ((key_bind[bit][0] && k[key_bind[bit][0]]) || (key_bind[bit][1] && k[key_bind[bit][1]])) {
+            p |= (uint8_t)(1 << bit);
+        }
     }
     for (int bit = 0; bit < 8; bit++) { /* the taps that were too short to be seen last for three frames */
         if (tap_latch[bit]) {

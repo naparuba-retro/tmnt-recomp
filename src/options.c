@@ -34,8 +34,22 @@ static const OptInfo info[OPT_COUNT] = {
     [OPT_VOLUME] = {"volume", "sound", "Volume", "The sound level of the game.", 100, 0, 100, 1, 1},
     [OPT_MUTE] = {"mute", "sound", "Mute", "No sound at all (key M).", 0, 0, 1, 1, 1},
     [OPT_FULLSCREEN] = {"fullscreen", "graphics", "Fullscreen", "The game on the whole screen (F11).", 0, 0, 1, 1, 1},
-    [OPT_INTEGER_SCALE] = {"integer_scale", "graphics", "Integer scaling", "Pixels all the same size (black bars where it does not fit).", 0, 0, 1, 1, 1},
+    [OPT_INTEGER_SCALE] = {"integer_scale", "graphics", "Integer scaling", "Whole-number zoom: every pixel the same size (the proportions are always kept).", 0,
+                           0, 1, 1, 1},
     [OPT_SHOW_FPS] = {"show_fps", "graphics", "Show FPS", "The number of images per second in a corner of the screen.", 0, 0, 1, 1, 1},
+#define KEYOPT(row, name, label)                                                                                                                               \
+    [OPT_KEY_FIRST + (row) * 2] = {"key_" name "_1", "keys", label " key 1", "The first key of this pad button (0: default, -1: none).", 0, -1, 4096, 1, 1},   \
+                             [OPT_KEY_FIRST + (row) * 2 + 1] = {                                                                                               \
+                                 "key_" name "_2", "keys", label " key 2", "The second key of this pad button (0: default, -1: none).", 0, -1, 4096, 1, 1}
+    KEYOPT(0, "a", "Jump"),
+    KEYOPT(1, "b", "Attack"),
+    KEYOPT(2, "select", "Select"),
+    KEYOPT(3, "start", "Start"),
+    KEYOPT(4, "up", "Up"),
+    KEYOPT(5, "down", "Down"),
+    KEYOPT(6, "left", "Left"),
+    KEYOPT(7, "right", "Right"),
+#undef KEYOPT
 };
 
 static int local[OPT_COUNT]; /* the values that no engine holds */

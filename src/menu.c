@@ -30,6 +30,8 @@ typedef enum {
     K_QUIT,
     K_YES,
     K_NO,
+    K_KEY,   /* one of the 16 key boxes of the controls page: arg = row * 2 + slot */
+    K_RESET, /* the default keys */
     K_STATIC
 } Kind;
 
@@ -56,6 +58,8 @@ static int is_open, game_running, page, quit_modal, tick;
 static Kind focus_kind = K_PLAY;
 static int focus_arg;
 static int last_mx = -1, last_my = -1;
+static int capture_idx = -1; /* the key box that waits for a key (row * 2 + slot), -1 for none */
+static const MenuKeys *keys_api;
 static char page_names[4][12] = {"PLAY", "SOUND", "GRAPHICS", "CONTROLS"};
 
 /* ------------------------------------------------------------------ setup --- */
@@ -91,9 +95,18 @@ void menu_open(int running) {
     is_open = 1;
     game_running = running;
     quit_modal = 0;
+    capture_idx = -1;
     page = 0;
     focus_kind = K_PLAY;
     focus_arg = 0;
+}
+
+void menu_set_keys(const MenuKeys *k) {
+    keys_api = k;
+}
+
+int menu_capturing(void) {
+    return capture_idx;
 }
 
 void menu_close(void) {
@@ -347,11 +360,6 @@ static void draw_options_page(const Env *e, const OptId *ids, int count, const c
     narration(e, 40, 628, 1200, 76);
 }
 
-static const char *const keys_list[][2] = {
-    {"MOVE", "ARROW KEYS"}, {"ATTACK (B)", "Z OR W"}, {"JUMP (A)", "X"}, {"START", "ENTER"}, {"SELECT", "TAB OR RIGHT SHIFT"}, {"MENU", "ESC"}, {"PAUSE", "P"},
-    {"MUTE", "M"},          {"RESTART", "F5"},        {"REWIND", "F9"},  {"CAPTURE", "F10"},
-};
-
 static const char *const pad_list[][2] = {
     {"MOVE", "DPAD OR LEFT STICK"}, {"JUMP (A)", "A"},       {"ATTACK (B)", "X OR B"},   {"START", "START"},
     {"SELECT", "Y (WEAPON / VAN)"}, {"MENU", "VIEW / BACK"}, {"MENU TABS", "LB AND RB"}, {"REWIND", "LEFT TRIGGER"},
@@ -365,6 +373,29 @@ static void controls_list(const Env *e, const char *const (*list)[2], int count,
     }
 }
 
+/* The key of a box: what the player chose, or the default of the platform. 0 = none. */
+static int key_code(int idx) {
+    int v = opt_get((OptId)(OPT_KEY_FIRST + idx));
+    if (v > 0) {
+        return v;
+    }
+    return v < 0 || !keys_api ? 0 : keys_api->default_code(idx / 2, idx & 1);
+}
+
+static void key_box(const Env *e, int idx, float x, float y, float w, float h) {
+    UiQuad q = quad(e, x, y, w, h, 6);
+    int waiting = capture_idx == idx, code = key_code(idx);
+    panel(e, q, waiting ? YELLOW : WHITE, 4);
+    outline(e, &q, 3.5f, INK);
+    const char *s = waiting ? "PRESS A KEY" : code && keys_api ? keys_api->name(code) : "NONE";
+    float size = h * 0.55f, width = ui_text_width(font_title, size * e->s, s), room = (w - 14.0f) * e->s;
+    if (width > room) {
+        size *= room / width;
+    }
+    text_centred(e, font_title, size, &q, waiting || code ? INK : GREY, 0xFFFFFFFF, s);
+    reg(K_KEY, idx, q, 1);
+}
+
 static void draw_controls_page(const Env *e) {
     UiQuad left = quad(e, 40, 112, 580, 500, 10), right = quad(e, 660, 112, 580, 500, 10);
     UiQuad *sides[2] = {&left, &right};
@@ -375,19 +406,22 @@ static void draw_controls_page(const Env *e) {
     }
     caption(e, 70, 94, 280, "KEYBOARD");
     caption(e, 690, 94, 280, "GAMEPAD");
-    controls_list(e, keys_list, 11, 70, 176, 34.0f, 210);
+    static const char *const row_name[8] = {"JUMP (A)", "ATTACK (B)", "WEAPON / VAN", "START", "UP", "DOWN", "LEFT", "RIGHT"};
+    for (int row = 0; row < 8; row++) {
+        float yy = 170 + (float)row * 42.0f, px = 24.0f * e->s;
+        ui_text(e->ui, font_title, px, X(e, 70), Y(e, yy + 19) + px * 0.35f, INK, row_name[row]);
+        key_box(e, row * 2, 285, yy, 150, 38);
+        key_box(e, row * 2 + 1, 450, yy, 150, 38);
+    }
+    button(e, K_RESET, 0, 70, 526, 270, 56, ORANGE, "RESET KEYS", 1);
+    ui_text_wrapped(e->ui, font_body, 17.0f * e->s, X(e, 376), Y(e, 546), 226 * e->s, 22.0f * e->s, INK, "CLICK A BOX AND PRESS THE NEW KEY.");
     controls_list(e, pad_list, 8, 690, 176, 40.0f, 205);
-    UiQuad note = quad(e, 690, 506, 520, 70, 0);
+    UiQuad note = quad(e, 690, 500, 520, 100, 0);
     panel(e, note, 0xFFF9B0, 4);
     outline(e, &note, 3.5f, INK);
-    ui_text_wrapped(e->ui, font_body, 18.0f * e->s, X(e, 704), Y(e, 534), 492 * e->s, 23.0f * e->s, INK,
-                    "The shortcuts H J E C S R F L I still work. Changing the keys comes soon.");
-    UiQuad soon = quad(e, 70, 560, 260, 40, 8);
-    panel(e, soon, 0xD8D2C0, 3);
-    outline(e, &soon, 3.5f, INK);
-    text_centred(e, font_title, 22, &soon, 0x7A7464, 0xFFFFFFFF, "CHANGE KEYS");
-    soon_tag(e, 346, 566);
-    reg(K_STATIC, 0, soon, 0);
+    ui_text_wrapped(
+        e->ui, font_body, 17.0f * e->s, X(e, 704), Y(e, 526), 492 * e->s, 22.0f * e->s, INK,
+        "OTHER KEYS: ESC MENU / P PAUSE / M MUTE / F5 RESTART / F9 REWIND / F10 CAPTURE / F11 FULLSCREEN.   A key that the pad uses loses its shortcut.");
 }
 
 static const char *const original_text = "THE GAME EXACTLY AS IT WAS IN 1990.";
@@ -727,6 +761,15 @@ static MenuAction activate(Kind k, int arg, int mouse_x) {
             focus_kind = K_NO;
             focus_arg = 0;
             break;
+        case K_KEY:
+            capture_idx = arg;
+            break;
+        case K_RESET:
+            for (int i = 0; i < 16; i++) {
+                opt_set_user((OptId)(OPT_KEY_FIRST + i), 0);
+            }
+            save_options();
+            break;
         case K_YES:
             return MENU_QUIT;
         case K_NO:
@@ -745,6 +788,25 @@ MenuAction menu_update(const MenuInput *in) {
     if (find_focus() < 0 && n_last > 0) { /* the focused item is not on this page: the page's own tab */
         focus_kind = K_TAB;
         focus_arg = page;
+    }
+    if (capture_idx >= 0) { /* a key box waits for its key: nothing else works until it has it (Esc or a click gives up) */
+        if (in->key > 0) {
+            int code = in->key, row = capture_idx / 2, slot = capture_idx & 1;
+            for (int i = 0; i < 16; i++) { /* a key serves one box only: it is taken from the other one */
+                if (i != capture_idx && key_code(i) == code) {
+                    opt_set_user((OptId)(OPT_KEY_FIRST + i), -1);
+                }
+            }
+            int is_default = keys_api && keys_api->default_code(row, slot) == code;
+            opt_set_user((OptId)(OPT_KEY_FIRST + capture_idx), is_default ? 0 : code);
+            capture_idx = -1;
+            save_options();
+        } else if (in->escape || in->clicked) {
+            capture_idx = -1;
+        }
+        last_mx = in->mouse_x;
+        last_my = in->mouse_y;
+        return MENU_NONE;
     }
     if (drag_opt >= 0) { /* a slider is being dragged: it follows the mouse until the button is let go */
         if (in->mouse_down && in->mouse_x >= 0) {

@@ -14,7 +14,15 @@ typedef struct {
     int mouse_x, mouse_y;      /* in the window, pixels; -1 when unknown */
     int clicked;               /* left button pressed since the last call */
     int mouse_down;            /* the left button is held (drags a slider) */
+    int key;                   /* a key pressed since the last call (its code in platform.h), 0 if none: the new key when a key is being chosen */
 } MenuInput;
+
+/* What the menu asks the platform layer about the keyboard (the menu itself does not depend on it). `row`: 0 A, 1 B, 2 Select, 3 Start, 4 Up, 5 Down, 6 Left, 7 Right. */
+typedef struct {
+    const char *(*name)(int code);
+    int (*default_code)(int row, int slot);
+} MenuKeys;
+void menu_set_keys(const MenuKeys *keys);
 
 typedef enum {
     MENU_NONE,
@@ -43,8 +51,11 @@ enum {
     MENU_ITEM_RESUME,
     MENU_ITEM_QUIT,
     MENU_ITEM_YES,
-    MENU_ITEM_NO
+    MENU_ITEM_NO,
+    MENU_ITEM_KEY,  /* arg: row * 2 + slot */
+    MENU_ITEM_RESET /* the button that gives the default keys back */
 };
+int menu_capturing(void);                                /* tests: a key is being chosen (-1 if not, else row * 2 + slot) */
 int menu_item_centre(int kind, int arg, int *x, int *y); /* 1 if the item is on the page */
 void menu_select_page(int page);                         /* tests: 0 PLAY, 1 SOUND, 2 GRAPHICS, 3 CONTROLS */
 void menu_set_focus_option(int opt_id);
