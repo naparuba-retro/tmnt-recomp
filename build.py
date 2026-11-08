@@ -47,7 +47,7 @@ if WINDOWS:
             sys.exit(rc)
 else:
     cc = os.environ.get("CC", "cc")
-    flags = ["-std=c11", "-O2", "-Wall", "-Wextra", "-Wno-unused-parameter", "-I" + src]
+    flags = ["-std=c11", "-O2", "-pthread", "-Wall", "-Wextra", "-Wno-unused-parameter", "-I" + src]
     for exe, mains in targets:
         extra = []
         if exe == "tmnt":

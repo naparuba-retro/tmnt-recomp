@@ -499,8 +499,9 @@ static void draw_options_page(const Env *e, const OptId *ids, int count, const c
     ui_halftone_quad(e->ui, &q, 0xF3D9A0, 12.0f * e->s, 1.0f, 0.0f, 255);
     outline(e, &q, 6.0f, INK);
     caption(e, 70, 94, 280, title);
+    float step = count > 7 ? 46.0f : 70.0f, first = count > 7 ? 152.0f : 170.0f, height = count > 7 ? 42.0f : 60.0f; /* a page of many options is tighter */
     for (int i = 0; i < count; i++) {
-        option_row(e, ids[i], 90, 170 + (float)i * 70.0f, 1060, 60, 0);
+        option_row(e, ids[i], 90, first + (float)i * step, 1060, height, 0);
     }
     narration(e, 40, 628, 1200, 76);
 }
@@ -726,7 +727,8 @@ void menu_draw(Ui *ui, const uint32_t *picture) {
     }
     draw_tabs(&e);
     static const OptId sound[] = {OPT_VOLUME, OPT_MUTE};
-    static const OptId graphics[] = {OPT_LARGE_VIEW, OPT_NO_FLICKER, OPT_HITBOX_VIEW, OPT_FULLSCREEN, OPT_INTEGER_SCALE, OPT_SHOW_FPS};
+    static const OptId graphics[] = {OPT_LARGE_VIEW, OPT_NO_FLICKER, OPT_HITBOX_VIEW, OPT_FULLSCREEN, OPT_INTEGER_SCALE,
+                                     OPT_SHOW_FPS,   OPT_CRT,        OPT_CRT_SCAN,    OPT_CRT_MASK,   OPT_CRT_CURVE};
     switch (page) {
         case 0:
             draw_play_page(&e);
@@ -735,7 +737,7 @@ void menu_draw(Ui *ui, const uint32_t *picture) {
             draw_options_page(&e, sound, 2, "SOUND");
             break;
         case 2:
-            draw_options_page(&e, graphics, 6, "GRAPHICS");
+            draw_options_page(&e, graphics, 10, "GRAPHICS");
             break;
         default:
             draw_controls_page(&e);

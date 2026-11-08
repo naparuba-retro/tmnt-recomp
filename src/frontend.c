@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "crt.h"
 #include "fixes.h"
 #include "game.h"
 #include "help_screen.h"
@@ -555,6 +556,31 @@ static int keys_default(int row, int slot) {
 
 static const MenuKeys menu_keys = {keys_name, keys_default};
 
+/* The picture of the game, plain or with the CRT look (drawn by the processor at the size of the window, with the proportions kept). */
+static void present_game(void) {
+    static uint32_t *crt_buf;
+    static int crt_w, crt_h;
+    if (!opt_get(OPT_CRT)) {
+        platform_present(screen);
+        return;
+    }
+    int w, h;
+    platform_window_size(&w, &h);
+    if (w != crt_w || h != crt_h || !crt_buf) {
+        free(crt_buf);
+        crt_buf = (uint32_t *)malloc((size_t)w * (size_t)h * sizeof *crt_buf);
+        crt_w = w;
+        crt_h = h;
+    }
+    if (!crt_buf) {
+        platform_present(screen);
+        return;
+    }
+    CrtParams p = {opt_get(OPT_CRT_SCAN), opt_get(OPT_CRT_MASK), opt_get(OPT_CRT_CURVE), opt_get(OPT_INTEGER_SCALE)};
+    crt_render(crt_buf, w, h, screen, &p);
+    platform_present_hd(crt_buf, w, h);
+}
+
 /* The display options (menu or F11) reach the window, and the keys of the pad (menu) the keyboard. */
 static void apply_display_options(void) {
     for (int bit = 0; bit < 8; bit++) {
@@ -594,7 +620,7 @@ static void run_game_frame(Game *g, int audio) {
     if (opt_get(OPT_SHOW_FPS)) {
         count_fps();
     }
-    platform_present(screen);
+    present_game();
     if ((int)g->frame / 60 != last_title_frame && g->frame % 60 == 0) {
         char t[240];
         last_title_frame = (int)g->frame / 60;

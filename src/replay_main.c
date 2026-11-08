@@ -18,6 +18,7 @@
  * Environment : WAVOUT=<file.wav> (audio of the replay, one frame of sound per NMI, 44100 Hz mono), SNDCOUNT=<file> ("logical frame updates so far"), PIXPIPE=1 (pictures on stdout, PIXFROM / PIXTO : frame window), TRACE_UNBUF, REWINDMAP, SEEDOUT=<file> (writes the seeds of the port), RAMBIN=1 (one ram.bin file), NTDUMP=1 (name tables). */
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <errno.h>
 #ifdef _WIN32
 #include <io.h>
@@ -32,6 +33,7 @@
 #include "fixes.h"
 #include "enemy.h"
 #include "spawn_mask.h"
+#include "crt.h"
 #include "menu.h"
 #include "options.h"
 #include "ui.h"
@@ -952,6 +954,30 @@ static int menu_shots(const char *dir) {
         options_apply_edition(atoi(getenv("TMNT_MENU_EDITION")));
         if (getenv("TMNT_MENU_MODIFIED")) {
             opt_set_user(OPT_NO_FLICKER, 0);
+        }
+    }
+    if (getenv("TMNT_CRT_RAW")) { /* the CRT look on a picture given as raw 0x00RRGGBB words (256 x 240), to look at it: crt_flat.bmp and crt_curved.bmp */
+        static uint32_t pic[256 * 240];
+        FILE *cf = fopen(getenv("TMNT_CRT_RAW"), "rb");
+        if (cf) {
+            size_t got = fread(pic, sizeof pic[0], 256 * 240, cf);
+            fclose(cf);
+            if (got == 256 * 240) {
+                Ui cu = {0};
+                ui_resize(&cu, w, h);
+                for (int curved = 0; curved < 2; curved++) {
+                    CrtParams cp = {70, 40, curved ? 40 : 0, 0};
+                    crt_render(cu.px, w, h, pic, &cp);
+                    clock_t t0 = clock();
+                    for (int rep = 0; rep < 20; rep++) {
+                        crt_render(cu.px, w, h, pic, &cp);
+                    }
+                    printf("crt %s %dx%d: %.1f ms per picture\n", curved ? "curved" : "flat", w, h, (double)(clock() - t0) * 1000.0 / CLOCKS_PER_SEC / 20.0);
+                    char cn[600];
+                    snprintf(cn, sizeof cn, "%s/crt_%s.bmp", dir, curved ? "curved" : "flat");
+                    write_bmp24(cn, &cu);
+                }
+            }
         }
     }
     static uint32_t picture[256 * 240];
