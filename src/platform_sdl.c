@@ -99,6 +99,12 @@ void platform_poll(PlatformEvents *ev) {
         } else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_START) {
             start_seen = 1;
             start_tick = SDL_GetTicks();
+        } else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_BACK) {
+            pending.menu = 1; /* Back / View = Esc */
+        } else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER) {
+            pending.tab_prev = 1;
+        } else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) {
+            pending.tab_next = 1;
         } else if (e.type == SDL_KEYDOWN && !e.key.repeat) {
             pending.any_key = 1;
             switch (e.key.keysym.sym) {
@@ -202,7 +208,7 @@ static uint8_t controller_pad(void) {
     if (B(SDL_CONTROLLER_BUTTON_X) || B(SDL_CONTROLLER_BUTTON_B)) {
         p |= 0x40;
     }
-    if (B(SDL_CONTROLLER_BUTTON_BACK)) {
+    if (B(SDL_CONTROLLER_BUTTON_Y)) { /* Y = Select: the Back button opens the menu */
         p |= 0x20;
     }
     if (B(SDL_CONTROLLER_BUTTON_START)) {

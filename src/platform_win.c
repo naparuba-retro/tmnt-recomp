@@ -155,14 +155,28 @@ static void pump_messages(void) {
 
 static int xinput_l2(void); /* defined below */
 
+static unsigned xinput_buttons(void); /* defined below */
+
 void platform_poll(PlatformEvents *ev) {
     static int l2_was;
+    static unsigned buttons_was;
     pump_messages();
     int l2 = GetForegroundWindow() == hwnd && xinput_l2();
     if (l2 && !l2_was) {
         pending.rewind = 1; /* L2 = F9 */
     }
     l2_was = l2;
+    unsigned b = GetForegroundWindow() == hwnd ? xinput_buttons() : 0, edge = b & ~buttons_was; /* the buttons pressed since the last call */
+    buttons_was = b;
+    if (edge & XINPUT_GAMEPAD_BACK) {
+        pending.menu = 1; /* Back / View = Esc */
+    }
+    if (edge & XINPUT_GAMEPAD_LEFT_SHOULDER) {
+        pending.tab_prev = 1;
+    }
+    if (edge & XINPUT_GAMEPAD_RIGHT_SHOULDER) {
+        pending.tab_next = 1;
+    }
     *ev = pending;
     memset(&pending, 0, sizeof pending);
 }
@@ -187,13 +201,18 @@ static int xinput_state(XINPUT_STATE *st) {
     return slot >= 0;
 }
 
+static unsigned xinput_buttons(void) {
+    XINPUT_STATE st;
+    return xinput_state(&st) ? st.Gamepad.wButtons : 0;
+}
+
 /* Left trigger pressed (L2 = rewind). */
 static int xinput_l2(void) {
     XINPUT_STATE st;
     return xinput_state(&st) && st.Gamepad.bLeftTrigger > 128;
 }
 
-/* d-pad or left stick, A = jump (NES A), X or B = attack (NES B), Start, Back = Select (L2 = rewind, see platform_poll). */
+/* d-pad or left stick, A = jump (NES A), X or B = attack (NES B), Start, Y = Select (Back opens the menu, LB and RB are the menu's tabs, L2 = rewind: see platform_poll). */
 static uint8_t xinput_pad(void) {
     XINPUT_STATE st;
     if (!xinput_state(&st)) {
@@ -208,7 +227,7 @@ static uint8_t xinput_pad(void) {
     if (b & (XINPUT_GAMEPAD_X | XINPUT_GAMEPAD_B)) {
         p |= 0x40;
     }
-    if (b & XINPUT_GAMEPAD_BACK) {
+    if (b & XINPUT_GAMEPAD_Y) { /* Y = Select (the weapon, the van): the Back button opens the menu */
         p |= 0x20;
     }
     if (b & XINPUT_GAMEPAD_START) {

@@ -344,27 +344,41 @@ static const char *const keys_list[][2] = {
     {"MUTE", "M"},          {"RESTART", "F5"},        {"REWIND", "F9"},  {"CAPTURE", "F10"},
 };
 
-static void draw_controls_page(const Env *e) {
-    UiQuad q = quad(e, 40, 112, 1200, 500, 10);
-    panel(e, q, PAPER, 10);
-    ui_halftone_quad(e->ui, &q, 0xF3D9A0, 12.0f * e->s, 1.0f, 0.0f, 255);
-    outline(e, &q, 6.0f, INK);
-    caption(e, 70, 94, 280, "KEYBOARD");
-    for (int i = 0; i < (int)(sizeof keys_list / sizeof keys_list[0]); i++) {
-        float px = 28.0f * e->s, y = 172.0f + (float)(i % 6) * 56.0f, x = i < 6 ? 90.0f : 660.0f;
-        ui_text(e->ui, font_title, px, X(e, x), Y(e, y) + px * 0.4f, INK, keys_list[i][0]);
-        ui_text(e->ui, font_body, px, X(e, x + 220), Y(e, y) + px * 0.4f, 0x2F6FD6, keys_list[i][1]);
+static const char *const pad_list[][2] = {
+    {"MOVE", "DPAD OR LEFT STICK"}, {"JUMP (A)", "A"},       {"ATTACK (B)", "X OR B"},   {"START", "START"},
+    {"SELECT", "Y (WEAPON / VAN)"}, {"MENU", "VIEW / BACK"}, {"MENU TABS", "LB AND RB"}, {"REWIND", "LEFT TRIGGER"},
+};
+
+static void controls_list(const Env *e, const char *const (*list)[2], int count, float x, float y, float step, float value_x) {
+    for (int i = 0; i < count; i++) {
+        float px = 25.0f * e->s, yy = y + (float)i * step;
+        ui_text(e->ui, font_title, px, X(e, x), Y(e, yy) + px * 0.35f, INK, list[i][0]);
+        ui_text(e->ui, font_body, px, X(e, x + value_x), Y(e, yy) + px * 0.35f, 0x2F6FD6, list[i][1]);
     }
-    UiQuad note = quad(e, 660, 486, 520, 100, 0);
-    panel(e, note, 0xFFF9B0, 5);
-    outline(e, &note, 4.0f, INK);
-    ui_text_wrapped(e->ui, font_body, 20.0f * e->s, X(e, 676), Y(e, 520), 490 * e->s, 26.0f * e->s, INK,
-                    "The shortcuts H J E C S R F L I are still there. The pad works as the NES pad. Changing the keys comes soon.");
-    UiQuad soon = quad(e, 90, 534, 300, 56, 8);
-    panel(e, soon, 0xD8D2C0, 4);
-    outline(e, &soon, 4.0f, INK);
-    text_centred(e, font_title, 26, &soon, 0x7A7464, 0xFFFFFFFF, "CHANGE KEYS");
-    soon_tag(e, 410, 548);
+}
+
+static void draw_controls_page(const Env *e) {
+    UiQuad left = quad(e, 40, 112, 580, 500, 10), right = quad(e, 660, 112, 580, 500, 10);
+    UiQuad *sides[2] = {&left, &right};
+    for (int k = 0; k < 2; k++) {
+        panel(e, *sides[k], PAPER, 10);
+        ui_halftone_quad(e->ui, sides[k], k == 0 ? 0xF3D9A0 : 0xA9E0B0, 12.0f * e->s, 1.0f, 0.0f, 255);
+        outline(e, sides[k], 6.0f, INK);
+    }
+    caption(e, 70, 94, 280, "KEYBOARD");
+    caption(e, 690, 94, 280, "GAMEPAD");
+    controls_list(e, keys_list, 11, 70, 176, 34.0f, 210);
+    controls_list(e, pad_list, 8, 690, 176, 40.0f, 205);
+    UiQuad note = quad(e, 690, 506, 520, 70, 0);
+    panel(e, note, 0xFFF9B0, 4);
+    outline(e, &note, 3.5f, INK);
+    ui_text_wrapped(e->ui, font_body, 18.0f * e->s, X(e, 704), Y(e, 534), 492 * e->s, 23.0f * e->s, INK,
+                    "The shortcuts H J E C S R F L I still work. Changing the keys comes soon.");
+    UiQuad soon = quad(e, 70, 560, 260, 40, 8);
+    panel(e, soon, 0xD8D2C0, 3);
+    outline(e, &soon, 3.5f, INK);
+    text_centred(e, font_title, 22, &soon, 0x7A7464, 0xFFFFFFFF, "CHANGE KEYS");
+    soon_tag(e, 346, 566);
     reg(K_STATIC, 0, soon, 0);
 }
 
@@ -651,9 +665,22 @@ MenuAction menu_update(const MenuInput *in) {
         }
         return MENU_NONE;
     }
-    if (in->back && quit_modal) {
-        quit_modal = 0;
-        return MENU_NONE;
+    if (in->back) { /* B: back out of the question, or out of the menu if a game is under it */
+        if (quit_modal) {
+            quit_modal = 0;
+            focus_kind = K_QUIT;
+            focus_arg = 0;
+            return MENU_NONE;
+        }
+        if (game_running) {
+            is_open = 0;
+            return MENU_RESUME;
+        }
+    }
+    if ((in->tab_prev || in->tab_next) && !quit_modal) { /* LB and RB turn the pages */
+        page = (page + 4 + in->tab_next - in->tab_prev) % 4;
+        focus_kind = K_TAB;
+        focus_arg = page;
     }
     /* the mouse: the focus follows it, a click activates */
     if (in->mouse_x >= 0 && (in->mouse_x != last_mx || in->mouse_y != last_my || in->clicked)) {

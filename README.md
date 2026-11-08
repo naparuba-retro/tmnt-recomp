@@ -138,7 +138,7 @@ The Linux build runs on a Steam Deck (SteamOS already has SDL2, there is nothing
 1. In Desktop Mode, download the `linux-x86_64.tar.gz` of the release and unpack it, for instance in `/home/deck/Games/TMNT`.
 2. Put your ROM in the `rom` folder that is next to the `tmnt` executable.
 3. In Steam, "Add a Non-Steam Game" and pick the `tmnt` executable.
-4. Start it from **Game Mode**: the Deck's controls then work as a game controller (d-pad or left stick, A = jump, X or B = attack, Start, View = Select,
+4. Start it from **Game Mode**: the Deck's controls then work as a game controller (d-pad or left stick, A = jump, X or B = attack, Y = Select (weapon, van), Start, View = the menu, LB and RB = the menu's pages,
    left trigger = rewind).
 
 For now it works in **Game Mode only**. When it is started from Desktop Mode, Steam's desktop layout turns the controller into a keyboard (A becomes

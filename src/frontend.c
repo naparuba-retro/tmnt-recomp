@@ -573,6 +573,8 @@ static void menu_frame(Game *g, const PlatformEvents *ev) {
     in.confirm = (edge & 0x90) != 0; /* A or Start */
     in.back = (edge & 0x40) != 0;
     in.escape = ev->menu;
+    in.tab_prev = ev->tab_prev;
+    in.tab_next = ev->tab_next;
     platform_mouse(&in.mouse_x, &in.mouse_y, &in.clicked);
     MenuAction a = menu_update(&in);
     menu_draw(&menu_ui, game_started ? screen : NULL);

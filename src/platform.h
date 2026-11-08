@@ -18,7 +18,9 @@
 /* Key presses since the previous platform_poll() (one event per key press, no auto-repeat). */
 typedef struct {
     int quit;       /* window closed */
-    int menu;       /* Esc */
+    int menu;       /* Esc, or the Back / View button of a pad */
+    int tab_prev;   /* LB of a pad (the menu's tabs) */
+    int tab_next;   /* RB of a pad */
     int mute;       /* M */
     int pause;      /* P */
     int invincible; /* I */
@@ -38,10 +40,11 @@ typedef struct {
 
 int platform_init(const char *title); /* opens the window; 0 = ok */
 void platform_shutdown(void);
-int platform_audio_open(void);               /* 1 = sound available */
-void platform_poll(PlatformEvents *ev);      /* handles the window messages and fills `ev` */
-uint8_t platform_pad(void);                  /* NES pad: A=80 B=40 Select=20 Start=10 up=08 down=04 left=02 right=01 (0 when the window is not focused) */
-void platform_present(const uint32_t *argb); /* shows a 256x240 picture, 0xRRGGBB pixels */
+int platform_audio_open(void);          /* 1 = sound available */
+void platform_poll(PlatformEvents *ev); /* handles the window messages and fills `ev` */
+uint8_t platform_pad(
+    void); /* NES pad: A=80 B=40 Select=20 Start=10 up=08 down=04 left=02 right=01 (0 when the window is not focused). On a game pad: A = A, X or B = B, Y = Select, Start = Start */
+void platform_present(const uint32_t *argb);                  /* shows a 256x240 picture, 0xRRGGBB pixels */
 void platform_present_hd(const uint32_t *argb, int w, int h); /* shows a picture the size of the window (the menu), 0xRRGGBB pixels */
 void platform_window_size(int *w, int *h);                    /* the area of the window that the picture covers, in pixels */
 void platform_mouse(int *x, int *y,

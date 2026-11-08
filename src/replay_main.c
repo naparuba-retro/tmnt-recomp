@@ -743,6 +743,29 @@ static int menu_logic_tests(const char *dir, Ui *ui) {
     menu_expect(menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1, .escape = 1}) == MENU_NONE && menu_is_open(), "Esc cancels the quit question");
     menu_click(ui, MENU_ITEM_QUIT, 0);
     menu_expect(menu_click(ui, MENU_ITEM_YES, 0) == MENU_QUIT, "Quit game, then Yes, quits");
+    menu_open(0);
+    menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1});
+    int cx, cy;
+    menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1, .tab_next = 1});
+    menu_draw(ui, NULL);
+    menu_expect(menu_item_centre(MENU_ITEM_OPTION, OPT_VOLUME, &cx, &cy), "RB goes to the next page (SOUND)");
+    menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1, .tab_prev = 1});
+    menu_draw(ui, NULL);
+    menu_expect(menu_item_centre(MENU_ITEM_EDITION, 1, &cx, &cy), "LB goes back to the previous page (PLAY)");
+    menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1, .tab_prev = 1});
+    menu_draw(ui, NULL);
+    menu_expect(menu_item_centre(MENU_ITEM_TAB, 3, &cx, &cy) && !menu_item_centre(MENU_ITEM_EDITION, 1, &cx, &cy),
+                "LB on the first page wraps to the last (CONTROLS)");
+    menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1, .back = 1});
+    menu_expect(menu_is_open(), "B does not close the launcher (no game is running)");
+    menu_open(1);
+    menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1});
+    menu_expect(menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1, .back = 1}) == MENU_RESUME && !menu_is_open(),
+                "B closes the menu when a game is running");
+    menu_open(1);
+    menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1});
+    menu_click(ui, MENU_ITEM_QUIT, 0);
+    menu_expect(menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1, .back = 1}) == MENU_NONE && menu_is_open(), "B backs out of the quit question first");
     menu_open(1);
     menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1});
     menu_expect(menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1, .escape = 1}) == MENU_RESUME && !menu_is_open(), "Esc resumes a running game");
