@@ -157,8 +157,8 @@ In the reference game (EU, played by a person) the longest run is 155 frames wit
 
 ## PIZZA-005: the spawn mask (option `--spawn-mask`)
 
-**What.** The editor `spawn_editor/` (`python run.py`) lets one cut spawns of the enemy lists, variant by variant, and writes `spawn_editor/data/spawn_mask.txt`.
-With `--spawn-mask <file>` (or `TMNT_SPAWN_MASK=<file>` in the replay tool) the game does not create the enemies listed there. The window title shows `SPAWN MASK`.
+**What.** A fairer game: the enemies that are placed in a sneaky way are not created. They are listed in `data/spawn_mask.txt`, which the spawn editor (`tools/spawn_editor/`, `python run.py`) writes: one cuts spawns of the enemy lists there, variant by variant.
+The mask is on with the **S** key of the game or the menu's line (or `--spawn-mask <file>`, or `TMNT_SPAWN_MASK=<file>` in the replay tool); the window title shows `SPAWN MASK`.
 
 **How (`src/spawn_mask.c`, hook at the top of `spawn_at`, `src/enemies/spawning.c`).** A line gives the address of an entry of a list (bank 6, European
 addresses, the same in the US ROM), its signature (x, y, code) and the sprite sets it is cut for (`*` = all). The signature is checked against the ROM at load:
