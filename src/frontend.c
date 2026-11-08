@@ -4,6 +4,7 @@
  * H = hit boxes, J = the fixes of FIXES.md, E = the water fixes, C = the camera fix, S = the spawn mask, R = the balance, F = no sprite flicker, L = large view, F5 = restart, F9 = rewind, F10 = capture, Esc = quit. */
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include "fixes.h"
 #include "game.h"
 #include "help_screen.h"
@@ -293,6 +294,8 @@ static Rom *find_rom_in(const char *dir) {
     return s.eu ? s.eu : s.us;
 }
 
+static int find_data_dir(char *out, size_t size);
+
 /* ROM: the first argument that is not an option if there is one (no fallback, the reason of a refusal is shown); otherwise the first of
  * "rom" next to the executable, "rom" in the current folder, "../rom" next to the executable: the first that holds a known release.
  * NULL = error already shown. */
@@ -331,7 +334,9 @@ static Game *load_game(int argc, char **argv) {
         g->rom = find_rom_in(dirs[i]);
     }
     if (!g->rom) {
-        help_screen_rom_missing(dirs[0]); /* creates the folder and explains what to put in it */
+        char data_dir[1200];
+        find_data_dir(data_dir, sizeof data_dir);
+        help_screen_rom_missing(dirs[0], data_dir); /* creates the folder and explains what to put in it */
         return NULL;
     }
     return g;
@@ -468,6 +473,63 @@ static void logic_frame(Game *g, int keyboard) {
     invincible_cheat(g);
 }
 
+/* "Show FPS": the real number of pictures shown per second, in the bottom right corner (digits 3x5 drawn at twice the size, on a black patch). */
+static void draw_fps(int fps) {
+    static const uint16_t digit[10] = {0x7B6F, 0x2C97, 0x73E7, 0x73CF, 0x5BC9,
+                                       0x79CF, 0x79EF, 0x7249, 0x7BEF, 0x7BCF}; /* 15 bits, row by row, top left first */
+    char text[8];
+    int n = snprintf(text, sizeof text, "%d", fps > 999 ? 999 : fps);
+    int w = n * 8 + 2, x0 = SCREEN_W - 4 - w, y0 = SCREEN_H - 16;
+    for (int y = 0; y < 12; y++) {
+        for (int x = 0; x < w; x++) {
+            screen[(y0 + y) * SCREEN_W + x0 + x] = 0x000000;
+        }
+    }
+    for (int i = 0; i < n; i++) {
+        uint16_t bits = digit[text[i] - '0'];
+        for (int y = 0; y < 5; y++) {
+            for (int x = 0; x < 3; x++) {
+                if (bits & (1 << (14 - y * 3 - x))) {
+                    for (int d = 0; d < 4; d++) {
+                        screen[(y0 + 1 + y * 2 + d / 2) * SCREEN_W + x0 + 1 + i * 8 + x * 2 + d % 2] = 0xFFFFFF;
+                    }
+                }
+            }
+        }
+    }
+}
+
+static void count_fps(void) {
+    static struct timespec t0;
+    static int frames, shown;
+    struct timespec now;
+    timespec_get(&now, TIME_UTC);
+    if (!t0.tv_sec && !t0.tv_nsec) {
+        t0 = now;
+    }
+    frames++;
+    long ms = (long)((now.tv_sec - t0.tv_sec) * 1000 + (now.tv_nsec - t0.tv_nsec) / 1000000);
+    if (ms >= 500) {
+        shown = (int)(frames * 1000L / ms);
+        frames = 0;
+        t0 = now;
+    }
+    draw_fps(shown);
+}
+
+/* The display options (menu or F11) reach the window. */
+static void apply_display_options(void) {
+    static int fullscreen = -1, integer = -1;
+    if (fullscreen != opt_get(OPT_FULLSCREEN)) {
+        fullscreen = opt_get(OPT_FULLSCREEN);
+        platform_set_fullscreen(fullscreen);
+    }
+    if (integer != opt_get(OPT_INTEGER_SCALE)) {
+        integer = opt_get(OPT_INTEGER_SCALE);
+        platform_set_integer_scale(integer);
+    }
+}
+
 /* One game frame: keys, logic, rendering, window refresh. */
 static void run_game_frame(Game *g, int audio) {
     static int last_title_frame = -1;
@@ -485,6 +547,9 @@ static void run_game_frame(Game *g, int audio) {
         g->frame = 0;
     }
     render(g);
+    if (opt_get(OPT_SHOW_FPS)) {
+        count_fps();
+    }
     platform_present(screen);
     if ((int)g->frame / 60 != last_title_frame && g->frame % 60 == 0) {
         char t[240];
@@ -650,6 +715,11 @@ int main(int argc, char **argv) {
         if (ev.quit) {
             break;
         }
+        if (ev.fullscreen) { /* F11: like the menu's option, and saved as it is */
+            opt_set_user(OPT_FULLSCREEN, !opt_get(OPT_FULLSCREEN));
+            options_save(ini_path);
+        }
+        apply_display_options();
         if (menu_is_open()) {
             menu_frame(g, &ev);
             if (quit_requested) {

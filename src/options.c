@@ -33,9 +33,9 @@ static const OptInfo info[OPT_COUNT] = {
     [OPT_START_LEVEL] = {"start_level", "extras", "Start level", "The level where a new game starts.", 1, 1, 6, 0, 1},
     [OPT_VOLUME] = {"volume", "sound", "Volume", "The sound level of the game.", 100, 0, 100, 1, 1},
     [OPT_MUTE] = {"mute", "sound", "Mute", "No sound at all (key M).", 0, 0, 1, 1, 1},
-    [OPT_FULLSCREEN] = {"fullscreen", "graphics", "Fullscreen", "The game on the whole screen.", 0, 0, 1, 1, 0},
-    [OPT_INTEGER_SCALE] = {"integer_scale", "graphics", "Integer scaling", "Pixels all the same size (black bars where it does not fit).", 0, 0, 1, 1, 0},
-    [OPT_SHOW_FPS] = {"show_fps", "graphics", "Show FPS", "The number of images per second in a corner of the screen.", 0, 0, 1, 1, 0},
+    [OPT_FULLSCREEN] = {"fullscreen", "graphics", "Fullscreen", "The game on the whole screen (F11).", 0, 0, 1, 1, 1},
+    [OPT_INTEGER_SCALE] = {"integer_scale", "graphics", "Integer scaling", "Pixels all the same size (black bars where it does not fit).", 0, 0, 1, 1, 1},
+    [OPT_SHOW_FPS] = {"show_fps", "graphics", "Show FPS", "The number of images per second in a corner of the screen.", 0, 0, 1, 1, 1},
 };
 
 static int local[OPT_COUNT]; /* the values that no engine holds */

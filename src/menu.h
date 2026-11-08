@@ -31,6 +31,8 @@ int menu_is_open(void);
 MenuAction menu_update(const MenuInput *in);
 /* Draws the page on `ui` (the whole window); `picture` is the game's last 256x240 picture shown darkened behind (NULL at the launch). */
 void menu_draw(Ui *ui, const uint32_t *picture);
+/* The page of the "ROM needed" window: where to put the ROM (`rom_dir`). Needs menu_init for the fonts. */
+void menu_draw_rom_missing(Ui *ui, const char *rom_dir);
 /* Tests: where an item is (its centre, in pixels of the last drawn frame). kind: one of the MENU_ITEM_ values; arg: the page, the edition, the option or the level. */
 enum {
     MENU_ITEM_TAB,

@@ -33,6 +33,7 @@ typedef struct {
     int balance;    /* R */
     int flicker;    /* F */
     int large;      /* L */
+    int fullscreen; /* F11 */
     int restart;    /* F5 */
     int rewind;     /* F9 */
     int capture;    /* F10 */
@@ -51,6 +52,8 @@ void platform_window_size(int *w, int *h);                    /* the area of the
 void platform_mouse(
     int *x, int *y, int *clicked,
     int *down); /* the cursor in that area (-1 if it is elsewhere); clicked: the left button was pressed since the last call; down: it is held now */
+void platform_set_fullscreen(int on);    /* the window covers the whole screen (no border), or goes back to its place */
+void platform_set_integer_scale(int on); /* the game's picture is shown at a whole multiple of 256x240, centred, with black bars (0: it fills the window) */
 void platform_set_title(const char *title);
 void platform_wait_frame(void);                 /* paces the game at 60 frames per second (by the sound card when there is one) */
 void platform_audio_submit(const int16_t *pcm); /* SAMPLES_PER_FRAME mono 16-bit samples for the next frame */

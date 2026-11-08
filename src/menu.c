@@ -500,6 +500,34 @@ static void draw_modal(const Env *e) {
     button(e, K_NO, 0, 690, 380, 200, 76, GREEN, "NO", 1);
 }
 
+/* The page shown when no ROM is found (help_screen.c): one comic panel that says where to put it. */
+void menu_draw_rom_missing(Ui *ui, const char *rom_dir) {
+    Env e;
+    e.ui = ui;
+    e.s = fminf((float)ui->w / DESIGN_W, (float)ui->h / DESIGN_H);
+    e.ox = ((float)ui->w - DESIGN_W * e.s) * 0.5f;
+    e.oy = ((float)ui->h - DESIGN_H * e.s) * 0.5f;
+    n_items = 0;
+    draw_background(&e, NULL);
+    UiQuad p = quad(&e, 190, 90, 900, 450, 14);
+    panel(&e, p, PAPER, 12);
+    ui_halftone_quad(ui, &p, 0xF3D9A0, 11.0f * e.s, 1.0f, 0.0f, 255);
+    outline(&e, &p, 6.0f, INK);
+    UiQuad head = quad(&e, 300, 50, 680, 96, 16);
+    panel(&e, head, RED, 8);
+    ui_halftone_quad(ui, &head, 0xFFFFFF, 10.0f * e.s, 1.0f, 0.0f, 90);
+    outline(&e, &head, 6.0f, INK);
+    text_centred(&e, font_title, 62, &head, WHITE, INK, "ROM NEEDED");
+    ui_text_wrapped(
+        ui, font_body, 27.0f * e.s, X(&e, 250), Y(&e, 225), 780 * e.s, 36.0f * e.s, INK,
+        "Put your ROM of the game in the \"rom\" folder below. It is a .nes file and the European and American versions both work. Then start the game again.");
+    UiQuad path = quad(&e, 250, 360, 780, 70, 0);
+    panel(&e, path, 0xFFF9B0, 5);
+    outline(&e, &path, 4.0f, INK);
+    ui_text_wrapped(ui, font_body, 19.0f * e.s, X(&e, 266), Y(&e, 395), 748 * e.s, 26.0f * e.s, INK, rom_dir);
+    button(&e, K_STATIC, 0, 400, 570, 480, 84, GREEN, "PRESS ANY KEY TO QUIT", 1);
+}
+
 /* ------------------------------------------------------------------ drawing: a whole frame --- */
 void menu_draw(Ui *ui, const uint32_t *picture) {
     Env e;

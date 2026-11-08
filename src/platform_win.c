@@ -39,7 +39,8 @@ static int key_pad_bit(WPARAM vk) {
 }
 static BITMAPINFO bmi, bmi_hd;
 static uint32_t *hd_pixels; /* the menu's picture (the size of the window), when it is shown */
-static int hd_w, hd_h, clicked;
+static int hd_w, hd_h, clicked, integer_scale, is_fullscreen;
+static WINDOWPLACEMENT saved_place;
 static HWND hwnd;
 static uint32_t screen[SCREEN_W * SCREEN_H];
 static PlatformEvents pending; /* key presses seen by the window procedure since the last platform_poll() */
@@ -97,6 +98,8 @@ static LRESULT CALLBACK wndproc(HWND h, UINT m, WPARAM w, LPARAM l) {
                 pending.flicker = 1;
             } else if (w == 'L') {
                 pending.large = 1;
+            } else if (w == VK_F11) {
+                pending.fullscreen = 1;
             } else if (w == VK_F5) {
                 pending.restart = 1;
             } else if (w == VK_F9) {
@@ -112,6 +115,19 @@ static LRESULT CALLBACK wndproc(HWND h, UINT m, WPARAM w, LPARAM l) {
             GetClientRect(h, &r);
             if (hd_w) {
                 StretchDIBits(dc, 0, 0, r.right, r.bottom, 0, 0, hd_w, hd_h, hd_pixels, &bmi_hd, DIB_RGB_COLORS, SRCCOPY);
+            } else if (integer_scale) { /* a whole multiple of the picture, centred, black around */
+                int k = r.right / SCREEN_W < r.bottom / SCREEN_H ? r.right / SCREEN_W : r.bottom / SCREEN_H;
+                if (k < 1) {
+                    k = 1;
+                }
+                int pw = SCREEN_W * k, ph = SCREEN_H * k, x0 = (r.right - pw) / 2, y0 = (r.bottom - ph) / 2;
+                HBRUSH black = (HBRUSH)GetStockObject(BLACK_BRUSH);
+                RECT bar[4] = {
+                    {0, 0, r.right, y0 > 0 ? y0 : 0}, {0, y0 + ph, r.right, r.bottom}, {0, 0, x0 > 0 ? x0 : 0, r.bottom}, {x0 + pw, 0, r.right, r.bottom}};
+                for (int i = 0; i < 4; i++) {
+                    FillRect(dc, &bar[i], black);
+                }
+                StretchDIBits(dc, x0, y0, pw, ph, 0, 0, SCREEN_W, SCREEN_H, screen, &bmi, DIB_RGB_COLORS, SRCCOPY);
             } else {
                 StretchDIBits(dc, 0, 0, r.right, r.bottom, 0, 0, SCREEN_W, SCREEN_H, screen, &bmi, DIB_RGB_COLORS, SRCCOPY);
             }
@@ -372,6 +388,36 @@ void platform_present(const uint32_t *argb) {
     memcpy(screen, argb, sizeof screen);
     InvalidateRect(hwnd, NULL, FALSE);
     UpdateWindow(hwnd);
+}
+
+void platform_set_integer_scale(int on) {
+    if (integer_scale != on) {
+        integer_scale = on;
+        InvalidateRect(hwnd, NULL, TRUE);
+    }
+}
+
+void platform_set_fullscreen(int on) {
+    if (on == is_fullscreen) {
+        return;
+    }
+    if (on) { /* borderless window over the monitor the window is on */
+        MONITORINFO mi = {sizeof mi};
+        saved_place.length = sizeof saved_place;
+        GetWindowPlacement(hwnd, &saved_place);
+        if (GetMonitorInfo(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mi)) {
+            SetWindowLong(hwnd, GWL_STYLE, WS_POPUP | WS_VISIBLE);
+            SetWindowPos(hwnd, HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right - mi.rcMonitor.left, mi.rcMonitor.bottom - mi.rcMonitor.top,
+                         SWP_FRAMECHANGED | SWP_NOOWNERZORDER);
+            is_fullscreen = 1;
+        }
+    } else {
+        SetWindowLong(hwnd, GWL_STYLE, WS_OVERLAPPEDWINDOW | WS_VISIBLE);
+        SetWindowPlacement(hwnd, &saved_place);
+        SetWindowPos(hwnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+        is_fullscreen = 0;
+    }
+    InvalidateRect(hwnd, NULL, TRUE);
 }
 
 void platform_set_title(const char *title) {

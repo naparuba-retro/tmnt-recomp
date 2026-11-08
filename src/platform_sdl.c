@@ -183,6 +183,9 @@ void platform_poll(PlatformEvents *ev) {
                 case SDLK_l:
                     pending.large = 1;
                     break;
+                case SDLK_F11:
+                    pending.fullscreen = 1;
+                    break;
                 case SDLK_F5:
                     pending.restart = 1;
                     break;
@@ -361,6 +364,14 @@ void platform_present(const uint32_t *argb) {
     SDL_RenderClear(renderer);
     SDL_RenderCopy(renderer, texture, NULL, NULL);
     SDL_RenderPresent(renderer);
+}
+
+void platform_set_integer_scale(int on) {
+    SDL_RenderSetIntegerScale(renderer, on ? SDL_TRUE : SDL_FALSE); /* works with the logical size of the game's picture; the menu is 1:1 anyway */
+}
+
+void platform_set_fullscreen(int on) {
+    SDL_SetWindowFullscreen(window, on ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
 }
 
 void platform_set_title(const char *title) {

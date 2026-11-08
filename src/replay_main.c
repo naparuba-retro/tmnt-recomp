@@ -918,6 +918,12 @@ static int menu_shots(const char *dir) {
         snprintf(name, sizeof name, "%s/menu_%s.bmp", dir, names[p]);
         write_bmp24(name, &ui);
     }
+    menu_draw_rom_missing(&ui, "C:\\Games\\TMNT\\rom");
+    {
+        char name[600];
+        snprintf(name, sizeof name, "%s/menu_rom_missing.bmp", dir);
+        write_bmp24(name, &ui);
+    }
     return getenv("TMNT_MENU_EDITION") ? 0 : menu_logic_tests(dir, &ui);
 }
 
