@@ -10,6 +10,33 @@
 #define SCALE 3
 #define NBUF 4
 
+static unsigned char tap_latch[8]; /* per pad bit: frames left of a key press that was too short to be seen (key down and up in the same instant) */
+
+/* The pad bit of a key, or -1. */
+static int key_pad_bit(WPARAM vk) {
+    switch (vk) {
+        case 'X':
+            return 7;
+        case 'Z':
+        case 'W':
+            return 6;
+        case VK_TAB:
+        case VK_RSHIFT:
+            return 5;
+        case VK_RETURN:
+            return 4;
+        case VK_UP:
+            return 3;
+        case VK_DOWN:
+            return 2;
+        case VK_LEFT:
+            return 1;
+        case VK_RIGHT:
+            return 0;
+        default:
+            return -1;
+    }
+}
 static BITMAPINFO bmi, bmi_hd;
 static uint32_t *hd_pixels; /* the menu's picture (the size of the window), when it is shown */
 static int hd_w, hd_h, clicked;
@@ -41,6 +68,9 @@ static LRESULT CALLBACK wndproc(HWND h, UINT m, WPARAM w, LPARAM l) {
         case WM_KEYDOWN:
             if (l & 0x40000000) {
                 return 0; /* auto-repeat */
+            }
+            if (key_pad_bit(w) >= 0) {
+                tap_latch[key_pad_bit(w)] = 3; /* a very short tap (down and up delivered together) is still three frames of the pad */
             }
             pending.any_key = 1;
             if (w == VK_ESCAPE) {
@@ -171,6 +201,9 @@ void platform_poll(PlatformEvents *ev) {
     if (edge & XINPUT_GAMEPAD_BACK) {
         pending.menu = 1; /* Back / View = Esc */
     }
+    if (edge & XINPUT_GAMEPAD_START) {
+        pending.pad_start = 1;
+    }
     if (edge & XINPUT_GAMEPAD_LEFT_SHOULDER) {
         pending.tab_prev = 1;
     }
@@ -278,6 +311,12 @@ uint8_t platform_pad(void) {
     if (K(VK_RIGHT)) {
         p |= 0x01;
     }
+    for (int bit = 0; bit < 8; bit++) { /* the taps that were too short to be seen last for three frames */
+        if (tap_latch[bit]) {
+            p |= (uint8_t)(1 << bit);
+            tap_latch[bit]--;
+        }
+    }
     p |= xinput_pad();
     if ((p & 0x0C) == 0x0C) {
         p &= 0xF3; /* no simultaneous up+down */
@@ -314,7 +353,7 @@ void platform_window_size(int *width, int *height) {
     *height = r.bottom > 0 ? r.bottom : 1;
 }
 
-void platform_mouse(int *x, int *y, int *click) {
+void platform_mouse(int *x, int *y, int *click, int *down) {
     POINT p;
     RECT r;
     *x = *y = -1;
@@ -325,6 +364,7 @@ void platform_mouse(int *x, int *y, int *click) {
     }
     *click = clicked;
     clicked = 0;
+    *down = GetForegroundWindow() == hwnd && (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
 }
 
 void platform_present(const uint32_t *argb) {

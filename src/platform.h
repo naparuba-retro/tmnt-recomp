@@ -19,6 +19,7 @@
 typedef struct {
     int quit;       /* window closed */
     int menu;       /* Esc, or the Back / View button of a pad */
+    int pad_start;  /* the Start button of a pad was pressed (the menu: play / resume) */
     int tab_prev;   /* LB of a pad (the menu's tabs) */
     int tab_next;   /* RB of a pad */
     int mute;       /* M */
@@ -47,8 +48,9 @@ uint8_t platform_pad(
 void platform_present(const uint32_t *argb);                  /* shows a 256x240 picture, 0xRRGGBB pixels */
 void platform_present_hd(const uint32_t *argb, int w, int h); /* shows a picture the size of the window (the menu), 0xRRGGBB pixels */
 void platform_window_size(int *w, int *h);                    /* the area of the window that the picture covers, in pixels */
-void platform_mouse(int *x, int *y,
-                    int *clicked); /* the cursor in that area (-1 if it is elsewhere); clicked: the left button was pressed since the last call */
+void platform_mouse(
+    int *x, int *y, int *clicked,
+    int *down); /* the cursor in that area (-1 if it is elsewhere); clicked: the left button was pressed since the last call; down: it is held now */
 void platform_set_title(const char *title);
 void platform_wait_frame(void);                 /* paces the game at 60 frames per second (by the sound card when there is one) */
 void platform_audio_submit(const int16_t *pcm); /* SAMPLES_PER_FRAME mono 16-bit samples for the next frame */

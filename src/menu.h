@@ -9,9 +9,11 @@ typedef struct {
     int up, down, left, right; /* pressed since the last call (one event per press) */
     int confirm, back;         /* A / Enter, B */
     int tab_prev, tab_next;    /* LB / RB of a pad: the previous and the next page */
+    int start;                 /* the Start button of a pad: play / resume, whatever has the focus */
     int escape;                /* the Esc key */
     int mouse_x, mouse_y;      /* in the window, pixels; -1 when unknown */
     int clicked;               /* left button pressed since the last call */
+    int mouse_down;            /* the left button is held (drags a slider) */
 } MenuInput;
 
 typedef enum {

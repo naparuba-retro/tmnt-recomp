@@ -15,6 +15,7 @@ static SDL_Window *window;
 static SDL_Renderer *renderer;
 static SDL_Texture *texture, *hd_texture;
 static int hd_w, hd_h, hd_mode, click_pending;
+static unsigned char tap_latch[8]; /* per pad bit: frames left of a key press that was too short to be seen (key down and up in the same pump of events) */
 static SDL_AudioDeviceID audio_dev;
 static PlatformEvents pending;
 static uint64_t last_tick;
@@ -99,6 +100,7 @@ void platform_poll(PlatformEvents *ev) {
         } else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_START) {
             start_seen = 1;
             start_tick = SDL_GetTicks();
+            pending.pad_start = 1;
         } else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_BACK) {
             pending.menu = 1; /* Back / View = Esc */
         } else if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER) {
@@ -107,6 +109,42 @@ void platform_poll(PlatformEvents *ev) {
             pending.tab_next = 1;
         } else if (e.type == SDL_KEYDOWN && !e.key.repeat) {
             pending.any_key = 1;
+            {
+                int bit = -1; /* the pad bit of the key, to keep a very short tap for three frames */
+                switch (e.key.keysym.sym) {
+                    case SDLK_x:
+                        bit = 7;
+                        break;
+                    case SDLK_z:
+                    case SDLK_w:
+                        bit = 6;
+                        break;
+                    case SDLK_TAB:
+                    case SDLK_RSHIFT:
+                        bit = 5;
+                        break;
+                    case SDLK_RETURN:
+                        bit = 4;
+                        break;
+                    case SDLK_UP:
+                        bit = 3;
+                        break;
+                    case SDLK_DOWN:
+                        bit = 2;
+                        break;
+                    case SDLK_LEFT:
+                        bit = 1;
+                        break;
+                    case SDLK_RIGHT:
+                        bit = 0;
+                        break;
+                    default:
+                        break;
+                }
+                if (bit >= 0) {
+                    tap_latch[bit] = 3;
+                }
+            }
             switch (e.key.keysym.sym) {
                 case SDLK_ESCAPE:
                     escape_waiting = 1;
@@ -257,6 +295,12 @@ uint8_t platform_pad(void) {
     if (k[SDL_SCANCODE_RIGHT]) {
         p |= 0x01;
     }
+    for (int bit = 0; bit < 8; bit++) { /* the taps that were too short to be seen last for three frames */
+        if (tap_latch[bit]) {
+            p |= (uint8_t)(1 << bit);
+            tap_latch[bit]--;
+        }
+    }
     p |= controller_pad();
     if ((p & 0x0C) == 0x0C) {
         p &= 0xF3; /* no simultaneous up+down */
@@ -293,9 +337,10 @@ void platform_window_size(int *w, int *h) {
     SDL_GetRendererOutputSize(renderer, w, h);
 }
 
-void platform_mouse(int *x, int *y, int *click) {
+void platform_mouse(int *x, int *y, int *click, int *down) {
     int mx, my, ww, wh, ow, oh;
-    SDL_GetMouseState(&mx, &my);
+    Uint32 buttons = SDL_GetMouseState(&mx, &my);
+    *down = (buttons & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0;
     SDL_GetWindowSize(window, &ww, &wh);
     SDL_GetRendererOutputSize(renderer, &ow, &oh);
     *x = *y = -1;

@@ -676,6 +676,16 @@ static int menu_logic_tests(const char *dir, Ui *ui) {
     menu_expect(all && options_edition_matches(1) && opt_get(OPT_EDITION) == 1, "a click on Whole Pizza switches its nine options on");
     menu_click(ui, MENU_ITEM_OPTION, OPT_NO_FLICKER);
     menu_expect(!opt_get(OPT_NO_FLICKER) && !options_edition_matches(1) && opt_get(OPT_EDITION) == 1, "a line switched off: the edition stays, as modified");
+    { /* a click on the label of a line (not on its tick) is a click on the panel: it selects the edition, it does not switch the line */
+        MenuInput on_label = {0};
+        menu_draw(ui, NULL);
+        menu_item_centre(MENU_ITEM_OPTION, OPT_NO_FLICKER, &on_label.mouse_x, &on_label.mouse_y);
+        on_label.mouse_x += (int)(150.0f * (float)ui->w / 1280.0f);
+        on_label.clicked = 1;
+        menu_update(&on_label);
+        menu_expect(options_edition_matches(1) && opt_get(OPT_NO_FLICKER),
+                    "a click on the label of a line selects the edition (only the tick switches the line)");
+    }
     menu_click(ui, MENU_ITEM_EDITION, 0);
     all = 0;
     for (int id = OPT_FIX_CEILING; id <= OPT_NO_FLICKER; id++) {
@@ -730,6 +740,27 @@ static int menu_logic_tests(const char *dir, Ui *ui) {
     menu_update(&in);
     int v = opt_get(OPT_VOLUME);
     menu_expect(v >= 0 && v <= 100 && v != 40, "a click on the volume slider sets the volume");
+    { /* drag and drop of the cursor: the value follows the mouse while the button is held, and stops when it is let go */
+        int cx, cy;
+        menu_draw(ui, NULL);
+        menu_item_centre(MENU_ITEM_OPTION, OPT_VOLUME, &cx, &cy);
+        int track = cx + 150; /* the track starts there and is 320 pixels wide (a window of 1280 x 720) */
+        MenuInput press = {.mouse_x = track + 64, .mouse_y = cy, .clicked = 1, .mouse_down = 1};
+        menu_update(&press);
+        menu_expect(opt_get(OPT_VOLUME) == 20, "pressing on the slider at a fifth of the track sets 20");
+        menu_draw(ui, NULL);
+        MenuInput drag = {.mouse_x = track + 256, .mouse_y = cy + 90, .mouse_down = 1}; /* the mouse may leave the row while it drags */
+        menu_update(&drag);
+        menu_expect(opt_get(OPT_VOLUME) == 80, "dragging to four fifths sets 80, even when the mouse has left the row");
+        menu_draw(ui, NULL);
+        MenuInput let_go = {.mouse_x = track + 10, .mouse_y = cy, .mouse_down = 0};
+        menu_update(&let_go);
+        menu_draw(ui, NULL);
+        MenuInput moves = {.mouse_x = track + 20, .mouse_y = cy, .mouse_down = 0};
+        menu_update(&moves);
+        menu_expect(opt_get(OPT_VOLUME) == 80, "after the button is let go the mouse no longer moves the cursor");
+        v = opt_get(OPT_VOLUME);
+    }
     in = (MenuInput){.mouse_x = -1, .mouse_y = -1, .left = 1};
     menu_step(ui, in);
     menu_expect(opt_get(OPT_VOLUME) == (v - 5 < 0 ? 0 : v - 5), "left on the slider lowers the volume by 5");
@@ -738,7 +769,6 @@ static int menu_logic_tests(const char *dir, Ui *ui) {
     menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1});
     menu_click(ui, MENU_ITEM_LEVEL, 3);
     menu_expect(opt_get(OPT_START_LEVEL) == 3, "a click on a level chooses it");
-    menu_expect(menu_click(ui, MENU_ITEM_RESUME, 0) == MENU_NONE && menu_is_open(), "RESUME does nothing while no game runs");
     menu_click(ui, MENU_ITEM_QUIT, 0);
     menu_expect(menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1, .escape = 1}) == MENU_NONE && menu_is_open(), "Esc cancels the quit question");
     menu_click(ui, MENU_ITEM_QUIT, 0);
@@ -769,8 +799,77 @@ static int menu_logic_tests(const char *dir, Ui *ui) {
     menu_open(1);
     menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1});
     menu_expect(menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1, .escape = 1}) == MENU_RESUME && !menu_is_open(), "Esc resumes a running game");
+    menu_open(0);
+    menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1});
+    menu_expect(menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1, .confirm = 1}) == MENU_NEW_GAME && !menu_is_open(),
+                "Enter (confirm) on PLAY starts a new game");
+    menu_open(0); /* Start of a pad plays, whatever has the focus */
+    menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1});
+    menu_expect(menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1, .start = 1}) == MENU_NEW_GAME && !menu_is_open(), "Start of a pad starts a new game");
     menu_open(1);
-    menu_expect(menu_click(ui, MENU_ITEM_PLAY, 0) == MENU_NEW_GAME && !menu_is_open(), "PLAY starts a new game");
+    menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1});
+    menu_expect(menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1, .start = 1}) == MENU_RESUME && !menu_is_open(),
+                "Start of a pad resumes the game that runs");
+    { /* the focus goes where the player points: from Original, right is Whole Pizza (not a tab) */
+        menu_open(0);
+        MenuInput hover = {0};
+        menu_draw(ui, NULL);
+        menu_item_centre(MENU_ITEM_EDITION, 0, &hover.mouse_x, &hover.mouse_y);
+        MenuInput first = {.mouse_x = hover.mouse_x, .mouse_y = hover.mouse_y};
+        menu_update(&first); /* the first mouse sample: where the cursor rests */
+        first.mouse_x += 3;
+        menu_update(&first); /* it moved: the focus goes to Original */
+        for (int id = OPT_FIX_CEILING; id <= OPT_NO_FLICKER; id++) {
+            opt_set((OptId)id, 0);
+        }
+        opt_set(OPT_EDITION, 0);
+        menu_draw(ui, NULL);
+        menu_update(&(MenuInput){.mouse_x = -1, .mouse_y = -1, .right = 1});
+        menu_draw(ui, NULL);
+        menu_update(&(MenuInput){.mouse_x = -1, .mouse_y = -1, .confirm = 1});
+        menu_expect(opt_get(OPT_EDITION) == 1 && options_edition_matches(1), "right from Original goes to Whole Pizza (and a confirm there selects it)");
+        options_apply_edition(0);
+    }
+    { /* inside Whole Pizza: down from the edition enters the ticks, a confirm switches the one that has the focus */
+        menu_open(0);
+        options_apply_edition(1);
+        menu_draw(ui, NULL);
+        menu_click(ui, MENU_ITEM_EDITION, 1); /* the focus is on Whole Pizza (the click also selects it) */
+        menu_draw(ui, NULL);
+        menu_update(&(MenuInput){.mouse_x = -1, .mouse_y = -1, .down = 1}); /* the first tick */
+        menu_draw(ui, NULL);
+        menu_update(&(MenuInput){.mouse_x = -1, .mouse_y = -1, .down = 1}); /* the second */
+        menu_draw(ui, NULL);
+        menu_update(&(MenuInput){.mouse_x = -1, .mouse_y = -1, .confirm = 1});
+        menu_expect(!opt_get(OPT_FIX_WATER) && opt_get(OPT_FIX_CEILING),
+                    "down from Whole Pizza enters its ticks: two downs and a confirm switch the second line off");
+        menu_draw(ui, NULL);
+        menu_update(&(MenuInput){.mouse_x = -1, .mouse_y = -1, .left = 1});
+        menu_draw(ui, NULL);
+        menu_update(&(MenuInput){.mouse_x = -1, .mouse_y = -1, .confirm = 1});
+        menu_expect(opt_get(OPT_EDITION) == 0 && options_edition_matches(0), "left from a tick goes to Original (a confirm selects it)");
+        options_apply_edition(0);
+    }
+    menu_open(0);
+    menu_expect(menu_click(ui, MENU_ITEM_PLAY, 0) == MENU_NEW_GAME && !menu_is_open(), "PLAY starts a new game when none runs");
+    menu_open(1);
+    menu_expect(menu_click(ui, MENU_ITEM_PLAY, 0) == MENU_RESUME && !menu_is_open(), "the same button resumes the game when one runs");
+    { /* only the tick of an extra answers to the mouse, not its label */
+        menu_open(0);
+        MenuInput x = {0};
+        menu_draw(ui, NULL);
+        menu_item_centre(MENU_ITEM_OPTION, OPT_INVINCIBLE, &x.mouse_x, &x.mouse_y);
+        int before = opt_get(OPT_INVINCIBLE);
+        MenuInput label = x;
+        label.mouse_x -= (int)(120.0f * (float)ui->w / 1280.0f);
+        label.clicked = 1;
+        menu_update(&label);
+        menu_expect(opt_get(OPT_INVINCIBLE) == before, "a click on the label of Invincible does nothing");
+        x.clicked = 1;
+        menu_update(&x);
+        menu_expect(opt_get(OPT_INVINCIBLE) != before, "a click on its tick switches it");
+        opt_set(OPT_INVINCIBLE, 0);
+    }
     remove(ini);
     return menu_failures ? 1 : 0;
 }
@@ -802,6 +901,18 @@ static int menu_shots(const char *dir) {
         none.mouse_x = none.mouse_y = -1;
         menu_draw(&ui, p == 0 ? NULL : picture); /* a first frame records where the items are */
         menu_update(&none);
+        if (p == 0 && getenv("TMNT_MENU_HOVER_OPT")) { /* the mouse over the tick of an option */
+            MenuInput hover = {0};
+            if (menu_item_centre(MENU_ITEM_OPTION, atoi(getenv("TMNT_MENU_HOVER_OPT")), &hover.mouse_x, &hover.mouse_y)) {
+                menu_update(&hover);
+            }
+        }
+        if (p == 0 && getenv("TMNT_MENU_HOVER_ED")) { /* the mouse over an edition (the focus outline must be under its title) */
+            MenuInput hover = {0};
+            if (menu_item_centre(MENU_ITEM_EDITION, atoi(getenv("TMNT_MENU_HOVER_ED")), &hover.mouse_x, &hover.mouse_y)) {
+                menu_update(&hover);
+            }
+        }
         menu_draw(&ui, p == 0 ? NULL : picture);
         char name[600];
         snprintf(name, sizeof name, "%s/menu_%s.bmp", dir, names[p]);

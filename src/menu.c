@@ -92,7 +92,7 @@ void menu_open(int running) {
     game_running = running;
     quit_modal = 0;
     page = 0;
-    focus_kind = running ? K_RESUME : K_PLAY;
+    focus_kind = K_PLAY;
     focus_arg = 0;
 }
 
@@ -229,7 +229,11 @@ static void button(const Env *e, Kind kind, int arg, float x, float y, float w, 
     panel(e, q, enabled ? colour : 0x8E8A7E, 7);
     ui_halftone_quad(e->ui, &q, 0xFFFFFF, 9.0f * e->s, 1.0f, 0.0f, 90);
     outline(e, &q, 5.0f, INK);
-    text_centred(e, font_title, h * 0.55f, &q, WHITE, INK, label);
+    float size = h * 0.55f, width = ui_text_width(font_title, size * e->s, label), room = (w - 40.0f) * e->s; /* the label is made smaller if it does not fit */
+    if (width > room) {
+        size *= room / width;
+    }
+    text_centred(e, font_title, size, &q, WHITE, INK, label);
     reg(kind, arg, q, enabled);
 }
 
@@ -254,12 +258,13 @@ static const char *focus_description(void) {
         return "Leaves the game.";
     }
     if (focus_kind == K_PLAY) {
-        return "Starts a new game with the options above.";
-    }
-    if (focus_kind == K_RESUME) {
-        return game_running ? "Goes back to the game where you left it." : "No game is running.";
+        return game_running ? "Goes back to the game where you left it." : "Starts a new game with the options above.";
     }
     return "";
+}
+
+static int focus_in_whole_pizza(void) {
+    return (focus_kind == K_OPT && focus_arg >= OPT_FIX_CEILING && focus_arg <= OPT_NO_FLICKER) || (focus_kind == K_EDITION && focus_arg == 1);
 }
 
 static void narration(const Env *e, float x, float y, float w, float h) {
@@ -299,9 +304,12 @@ static void draw_tabs(const Env *e) {
     button(e, K_QUIT, 0, 1010, 22, 230, 56, RED, "QUIT GAME", 1);
 }
 
-static void option_row(const Env *e, OptId id, float x, float y, float w, float h) {
+static void option_row(const Env *e, OptId id, float x, float y, float w, float h, int tick_only) {
     const OptInfo *oi = opt_info(id);
     UiQuad q = quad(e, x, y, w, h, 0);
+    if (tick_only && opt_info(id)->max == 1) { /* only the tick answers to the mouse: the label and the rest are not the item */
+        q = quad(e, x + w - 54, y + (h - 38) * 0.5f - 2, 42, 42, 0);
+    }
     reg(K_OPT, (int)id, q, oi->wired);
     float px = 30.0f * e->s;
     ui_text(e->ui, font_title, px, X(e, x + 8), Y(e, y + h * 0.5f) + px * 0.34f, oi->wired ? INK : 0x7A7464, oi->label);
@@ -334,7 +342,7 @@ static void draw_options_page(const Env *e, const OptId *ids, int count, const c
     outline(e, &q, 6.0f, INK);
     caption(e, 70, 94, 280, title);
     for (int i = 0; i < count; i++) {
-        option_row(e, ids[i], 90, 170 + (float)i * 70.0f, 1060, 60);
+        option_row(e, ids[i], 90, 170 + (float)i * 70.0f, 1060, 60, 0);
     }
     narration(e, 40, 628, 1200, 76);
 }
@@ -396,6 +404,11 @@ static void draw_edition(const Env *e, int ed, float x, float y, float w, float 
         ui_stroke_quad(e->ui, &glow, 15.0f * e->s, YELLOW);
         outline(e, &q, 6.0f, INK);
     }
+    if (focus_kind == K_EDITION && focus_arg == ed) { /* the focus, under the title and the tag (drawn next), not over them */
+        float pulse = 1.0f + 0.25f * sinf((float)tick * 0.18f);
+        ui_stroke_quad(e->ui, &q, 9.0f * e->s * pulse, WHITE);
+        ui_stroke_quad(e->ui, &q, 4.5f * e->s, ORANGE);
+    }
     UiQuad cap = caption(e, x + 30, y - 24, 270, ed == 0 ? "ORIGINAL" : "WHOLE PIZZA");
     reg(K_EDITION, ed, cap, 1); /* the title selects the edition... */
     reg(K_EDITION, ed, q, 1);   /* ...and so does the panel, under its lines (they are registered after it) */
@@ -409,22 +422,30 @@ static void draw_edition(const Env *e, int ed, float x, float y, float w, float 
     if (ed == 0) {
         ui_text(e->ui, font_title, 64.0f * e->s, X(e, x + 40), Y(e, y + 130), 0x2F6FD6, "TMNT");
         ui_text_outlined(e->ui, font_title, 64.0f * e->s, X(e, x + 40), Y(e, y + 130), YELLOW, INK, 3.0f * e->s, "TMNT");
-        ui_text_wrapped(e->ui, font_body, 24.0f * e->s, X(e, x + 40), Y(e, y + 190), (w - 100) * e->s, 30.0f * e->s, INK, original_text);
-        ui_text_wrapped(e->ui, font_body, 20.0f * e->s, X(e, x + 40), Y(e, y + 250), (w - 100) * e->s, 26.0f * e->s, 0x4A4438, original_text2);
+        ui_text_wrapped(e->ui, font_body, 25.0f * e->s, X(e, x + 40), Y(e, y + 190), (w - 100) * e->s, 31.0f * e->s, INK, original_text);
+        ui_text_wrapped(e->ui, font_body, 21.0f * e->s, X(e, x + 40), Y(e, y + 250), (w - 100) * e->s, 27.0f * e->s, INK, original_text2);
     } else {
         static const OptId rows[9] = {OPT_FIX_CEILING, OPT_FIX_WATER, OPT_FIX_HITBOX, OPT_FIX_CAMERA, OPT_SPAWN_MASK,
                                       OPT_BAL_DAMAGE,  OPT_BAL_REACH, OPT_LARGE_VIEW, OPT_NO_FLICKER};
         for (int i = 0; i < 9; i++) {
             float ry = y + 34 + (float)i * 31.0f;
-            UiQuad rq = quad(e, x + 24, ry, w - 190, 30, 0);
+            UiQuad rq = quad(e, x + 28, ry + 1, 28, 28, 0); /* only the tick answers to a click: the label and the rest of the panel select the edition */
             reg(K_OPT, (int)rows[i], rq, 1);
             checkbox(e, x + 30, ry + 2, 24, opt_get(rows[i]), 1);
             ui_text(e->ui, font_body, 22.0f * e->s, X(e, x + 68), Y(e, ry + 22), INK, opt_info(rows[i])->label);
         }
         if (logo) {
-            float lh = 150.0f, lw = lh * (float)ui_image_w(logo) / (float)ui_image_h(logo);
-            ui_image_draw(e->ui, logo, X(e, x + w - 40 - lw), Y(e, y + 40), lw * e->s, lh * e->s, 255, 1);
+            float lh = 118.0f, lw = lh * (float)ui_image_w(logo) / (float)ui_image_h(logo);
+            ui_image_draw(e->ui, logo, X(e, x + w - 50 - lw), Y(e, y + 30), lw * e->s, lh * e->s, 255, 1);
         }
+        /* what the line under the focus (or the mouse) does, at the bottom right of the panel */
+        UiQuad bubble = quad(e, x + w - 292, y + h - 168, 270, 148, 0);
+        panel(e, bubble, 0xFFF9B0, 4);
+        outline(e, &bubble, 3.5f, INK);
+        const char *text = focus_in_whole_pizza() && focus_kind == K_OPT
+                               ? opt_info((OptId)focus_arg)->description
+                               : "Click a tick to switch one line on or off. Click anywhere else in the panel for the whole edition.";
+        ui_text_wrapped(e->ui, font_body, 18.0f * e->s, X(e, x + w - 278), Y(e, y + h - 142), 242 * e->s, 23.0f * e->s, INK, text);
     }
 }
 
@@ -438,9 +459,11 @@ static void draw_play_page(const Env *e) {
     ui_halftone_quad(e->ui, &ex, 0xF3D9A0, 10.0f * e->s, 1.0f, 0.0f, 255);
     outline(e, &ex, 5.0f, INK);
     caption(e, 66, 468, 200, "EXTRAS");
-    option_row(e, OPT_INVINCIBLE, 56, 524, 350, 40);
-    option_row(e, OPT_HITBOX_VIEW, 56, 566, 350, 40);
-    ui_text_wrapped(e->ui, font_body, 17.0f * e->s, X(e, 62), Y(e, 632), 330 * e->s, 21.0f * e->s, 0x3A3428, focus_description());
+    option_row(e, OPT_INVINCIBLE, 56, 524, 350, 40, 1);
+    option_row(e, OPT_HITBOX_VIEW, 56, 566, 350, 40, 1);
+    if (!focus_in_whole_pizza()) { /* the description of what has the focus (the Whole Pizza lines show theirs in their own panel) */
+        ui_text_wrapped(e->ui, font_body, 18.0f * e->s, X(e, 62), Y(e, 634), 330 * e->s, 22.0f * e->s, INK, focus_description());
+    }
 
     /* level strip */
     UiQuad lv = quad(e, 450, 486, 500, 214, 8);
@@ -462,8 +485,7 @@ static void draw_play_page(const Env *e) {
     }
 
     /* buttons */
-    button(e, K_PLAY, 0, 990, 498, 250, 86, GREEN, "PLAY", 1);
-    button(e, K_RESUME, 0, 990, 604, 250, 86, BLUE, "RESUME", game_running);
+    button(e, K_PLAY, 0, 990, 520, 250, 150, GREEN, game_running ? "RESUME" : "PLAY", 1); /* one button: it starts the game, or goes back to it */
 }
 
 static void draw_modal(const Env *e) {
@@ -513,7 +535,7 @@ void menu_draw(Ui *ui, const uint32_t *picture) {
     }
     /* the focus: a thick white outline that pulses, with a yellow one inside */
     for (int i = n_items - 1; i >= 0; i--) {
-        if (items[i].kind == focus_kind && items[i].arg == focus_arg && items[i].enabled) {
+        if (items[i].kind == focus_kind && items[i].arg == focus_arg && items[i].enabled && items[i].kind != K_EDITION) { /* (an edition draws its own) */
             float pulse = 1.0f + 0.25f * sinf((float)tick * 0.18f);
             ui_stroke_quad(ui, &items[i].q, 9.0f * e.s * pulse, WHITE);
             ui_stroke_quad(ui, &items[i].q, 4.5f * e.s, ORANGE);
@@ -526,7 +548,7 @@ void menu_draw(Ui *ui, const uint32_t *picture) {
 
 /* ------------------------------------------------------------------ input --- */
 static int find_focus(void) {
-    for (int i = 0; i < n_last; i++) {
+    for (int i = n_last - 1; i >= 0; i--) { /* the last quad: the panel of an edition rather than its title */
         if (last_items[i].kind == focus_kind && last_items[i].arg == focus_arg) {
             return i;
         }
@@ -539,7 +561,42 @@ static void set_focus(int i) {
     focus_arg = last_items[i].arg;
 }
 
+/* The ticks of the Whole Pizza lines: reached from the edition (down), not from the other items. */
+static int is_pizza_tick(Kind kind, int arg) {
+    return page == 0 && kind == K_OPT && arg >= OPT_FIX_CEILING && arg <= OPT_NO_FLICKER;
+}
+
+static void focus_on(Kind kind, int arg) {
+    focus_kind = kind;
+    focus_arg = arg;
+}
+
 static void move_focus(int dx, int dy) {
+    if (focus_kind == K_EDITION && focus_arg == 1 && dy > 0 && page == 0) { /* Whole Pizza: down enters its list of ticks */
+        focus_on(K_OPT, OPT_FIX_CEILING);
+        return;
+    }
+    if (is_pizza_tick(focus_kind, focus_arg)) { /* inside the list: up and down walk it, left goes back to the other edition */
+        if (dy < 0) {
+            if (focus_arg == OPT_FIX_CEILING) {
+                focus_on(K_EDITION, 1);
+            } else {
+                focus_on(K_OPT, focus_arg - 1);
+            }
+            return;
+        }
+        if (dy > 0 && focus_arg < OPT_NO_FLICKER) {
+            focus_on(K_OPT, focus_arg + 1);
+            return;
+        }
+        if (dx < 0) {
+            focus_on(K_EDITION, 0);
+            return;
+        }
+        if (dx > 0) {
+            return;
+        }
+    }
     int cur = find_focus();
     if (cur < 0) {
         for (int i = 0; i < n_last; i++) {
@@ -553,21 +610,24 @@ static void move_focus(int dx, int dy) {
     float cx, cy;
     centre(&last_items[cur].q, &cx, &cy);
     int best = -1;
-    float best_score = 1e18f;
-    for (int i = 0; i < n_last; i++) {
-        if (i == cur || !last_items[i].enabled) {
-            continue;
-        }
-        float ix, iy;
-        centre(&last_items[i].q, &ix, &iy);
-        float along = dx ? (ix - cx) * (float)dx : (iy - cy) * (float)dy, across = dx ? fabsf(iy - cy) : fabsf(ix - cx);
-        if (along < 8.0f) {
-            continue;
-        }
-        float score = along + 2.5f * across;
-        if (score < best_score) {
-            best_score = score;
-            best = i;
+    for (int pass = 0; pass < 2 && best < 0; pass++) { /* first the items inside a cone of 45 degrees around the direction, then any item that lies that way */
+        float best_score = 1e18f;
+        for (int i = 0; i < n_last; i++) {
+            if (!last_items[i].enabled || (last_items[i].kind == focus_kind && last_items[i].arg == focus_arg) ||
+                is_pizza_tick(last_items[i].kind, last_items[i].arg)) {
+                continue; /* (an edition has several quads: its title and its panel; the ticks of Whole Pizza are reached from the edition) */
+            }
+            float ix, iy;
+            centre(&last_items[i].q, &ix, &iy);
+            float along = dx ? (ix - cx) * (float)dx : (iy - cy) * (float)dy, across = dx ? fabsf(iy - cy) : fabsf(ix - cx);
+            if (along < 8.0f || (pass == 0 && across > along)) {
+                continue;
+            }
+            float score = along + 2.5f * across;
+            if (score < best_score) {
+                best_score = score;
+                best = i;
+            }
         }
     }
     if (best >= 0) {
@@ -578,6 +638,22 @@ static void move_focus(int dx, int dy) {
 static void save_options(void) {
     if (ini_file[0]) {
         options_save(ini_file);
+    }
+}
+
+static int drag_opt = -1; /* the slider that the mouse is dragging */
+
+/* The value of a slider for a mouse position (the track is the right part of the row, see option_row). */
+static void slider_from_x(int arg, int mouse_x) {
+    const OptInfo *oi = opt_info((OptId)arg);
+    for (int i = 0; i < n_last; i++) {
+        if (last_items[i].kind == K_OPT && last_items[i].arg == arg) {
+            float x0 = last_items[i].q.x[3], x1 = last_items[i].q.x[2];
+            float tx0 = x1 - 380.0f * (x1 - x0) / 1060.0f, tw = 320.0f * (x1 - x0) / 1060.0f;
+            float frac = ((float)mouse_x - tx0) / tw;
+            frac = frac < 0 ? 0 : frac > 1 ? 1 : frac;
+            opt_set_user((OptId)arg, oi->min + (int)(frac * (float)(oi->max - oi->min) + 0.5f));
+        }
     }
 }
 
@@ -605,16 +681,9 @@ static MenuAction activate(Kind k, int arg, int mouse_x) {
                         opt_set_user(OPT_EDITION, 1);
                     }
                 }
-            } else if (mouse_x >= 0) { /* a click on the slider's track */
-                for (int i = 0; i < n_last; i++) {
-                    if (last_items[i].kind == K_OPT && last_items[i].arg == arg) {
-                        float x0 = last_items[i].q.x[3], x1 = last_items[i].q.x[2];
-                        float tx0 = x1 - 380.0f * (x1 - x0) / 1060.0f, tw = 320.0f * (x1 - x0) / 1060.0f;
-                        float frac = ((float)mouse_x - tx0) / tw;
-                        frac = frac < 0 ? 0 : frac > 1 ? 1 : frac;
-                        opt_set_user((OptId)arg, oi->min + (int)(frac * (float)(oi->max - oi->min) + 0.5f));
-                    }
-                }
+            } else if (mouse_x >= 0) { /* a click on the slider: the value follows the mouse while the button is held */
+                slider_from_x(arg, mouse_x);
+                drag_opt = arg;
             }
             save_options();
             break;
@@ -622,12 +691,9 @@ static MenuAction activate(Kind k, int arg, int mouse_x) {
         case K_LEVEL:
             opt_set(OPT_START_LEVEL, arg);
             break;
-        case K_PLAY:
+        case K_PLAY: /* one button: a new game at the launcher, back to the game when one is running */
             is_open = 0;
-            return MENU_NEW_GAME;
-        case K_RESUME:
-            is_open = 0;
-            return MENU_RESUME;
+            return game_running ? MENU_RESUME : MENU_NEW_GAME;
         case K_QUIT:
             quit_modal = 1;
             focus_kind = K_NO;
@@ -652,6 +718,14 @@ MenuAction menu_update(const MenuInput *in) {
         focus_kind = K_TAB;
         focus_arg = page;
     }
+    if (drag_opt >= 0) { /* a slider is being dragged: it follows the mouse until the button is let go */
+        if (in->mouse_down && in->mouse_x >= 0) {
+            slider_from_x(drag_opt, in->mouse_x);
+            return MENU_NONE;
+        }
+        drag_opt = -1;
+        save_options();
+    }
     if (in->escape) {
         if (quit_modal) {
             quit_modal = 0;
@@ -664,6 +738,10 @@ MenuAction menu_update(const MenuInput *in) {
             return MENU_RESUME;
         }
         return MENU_NONE;
+    }
+    if (in->start && !quit_modal) { /* Start of a pad: play, or resume the game, wherever the focus is */
+        is_open = 0;
+        return game_running ? MENU_RESUME : MENU_NEW_GAME;
     }
     if (in->back) { /* B: back out of the question, or out of the menu if a game is under it */
         if (quit_modal) {
@@ -683,7 +761,8 @@ MenuAction menu_update(const MenuInput *in) {
         focus_arg = page;
     }
     /* the mouse: the focus follows it, a click activates */
-    if (in->mouse_x >= 0 && (in->mouse_x != last_mx || in->mouse_y != last_my || in->clicked)) {
+    if (in->mouse_x >= 0 &&
+        ((last_mx >= 0 && (in->mouse_x != last_mx || in->mouse_y != last_my)) || in->clicked)) { /* (the first sample only says where the cursor rests) */
         for (int i = n_last - 1; i >= 0; i--) {
             if (last_items[i].enabled && ui_quad_contains(&last_items[i].q, (float)in->mouse_x, (float)in->mouse_y)) {
                 set_focus(i);

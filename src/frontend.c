@@ -34,6 +34,8 @@ static int paused, frozen;
 static Ui menu_ui;                       /* the menu is drawn here, the size of the window */
 static int game_started, quit_requested; /* a game is running under the menu / Quit game was chosen */
 static uint8_t menu_prev_pad;
+static uint8_t
+    pad_swallow; /* buttons that were held when the menu closed: the game does not see them until they are let go (Start that resumes must not pause) */
 static char ini_path[1100];
 /* the cheat "invincible" (key I, --invincible or the menu) is the option OPT_INVINCIBLE: the turtles' health is set back to the maximum */
 
@@ -454,7 +456,9 @@ static void invincible_cheat(Game *g) {
 /* The logic of one frame, with the pad from the keyboard (or from --input), as in the game window; without a keyboard (--dump) the pad is only
  * the --input script. */
 static void logic_frame(Game *g, int keyboard) {
-    g->pad = pad_script_n ? pad_script_at(g->frame) : keyboard ? platform_pad() : 0;
+    uint8_t raw = keyboard ? platform_pad() : 0;
+    pad_swallow &= raw;
+    g->pad = pad_script_n ? pad_script_at(g->frame) : (uint8_t)(raw & ~pad_swallow);
     g->frame++;
     record_input(g);
     rng_idle(g);
@@ -573,12 +577,16 @@ static void menu_frame(Game *g, const PlatformEvents *ev) {
     in.confirm = (edge & 0x90) != 0; /* A or Start */
     in.back = (edge & 0x40) != 0;
     in.escape = ev->menu;
+    in.start = ev->pad_start;
     in.tab_prev = ev->tab_prev;
     in.tab_next = ev->tab_next;
-    platform_mouse(&in.mouse_x, &in.mouse_y, &in.clicked);
+    platform_mouse(&in.mouse_x, &in.mouse_y, &in.clicked, &in.mouse_down);
     MenuAction a = menu_update(&in);
     menu_draw(&menu_ui, game_started ? screen : NULL);
     platform_present_hd(menu_ui.px, w, h);
+    if (a == MENU_NEW_GAME || a == MENU_RESUME) {
+        pad_swallow = platform_pad();
+    }
     if (a == MENU_NEW_GAME) {
         start_new_game(g);
     } else if (a == MENU_QUIT) {
@@ -657,6 +665,8 @@ int main(int argc, char **argv) {
         if (ev.menu) { /* Esc: the menu over the frozen game */
             menu_open(game_started);
             menu_prev_pad = platform_pad();
+            int mx, my, clicked, down;
+            platform_mouse(&mx, &my, &clicked, &down); /* a click made while playing must not reach the menu */
             continue;
         }
         if (ev.mute) {
