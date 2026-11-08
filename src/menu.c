@@ -52,7 +52,7 @@ typedef struct {
 } Env;
 
 static UiFont *font_title, *font_body;
-static UiImage *logo;
+static UiImage *logo, *rom_logo; /* the Whole Pizza logo (a file), the logo of the game (cut from its title screen) */
 static char ini_file[1100];
 static int is_open, game_running, page, quit_modal, tick;
 static Kind focus_kind = K_PLAY;
@@ -99,6 +99,92 @@ void menu_open(int running) {
     page = 0;
     focus_kind = K_PLAY;
     focus_arg = 0;
+}
+
+/* The logo is the tallest block of rows that are not black on the title screen; the black around it (reached from the edge of the cut) becomes transparent. */
+void menu_set_logo_picture(const uint32_t *pic) {
+    int best_y0 = -1, best_h = 0, y = 0;
+    while (y < 240) {
+        int nonblack = 0;
+        for (int x = 0; x < 256; x++) {
+            nonblack |= (pic[y * 256 + x] & 0xFFFFFF) != 0;
+        }
+        if (!nonblack) {
+            y++;
+            continue;
+        }
+        int y0 = y;
+        while (y < 240) {
+            nonblack = 0;
+            for (int x = 0; x < 256; x++) {
+                nonblack |= (pic[y * 256 + x] & 0xFFFFFF) != 0;
+            }
+            if (!nonblack) {
+                break;
+            }
+            y++;
+        }
+        if (y - y0 > best_h) {
+            best_h = y - y0;
+            best_y0 = y0;
+        }
+    }
+    if (best_h < 40) {
+        return;
+    }
+    int x0 = 256, x1 = -1;
+    for (int yy = best_y0; yy < best_y0 + best_h; yy++) {
+        for (int x = 0; x < 256; x++) {
+            if (pic[yy * 256 + x] & 0xFFFFFF) {
+                x0 = x < x0 ? x : x0;
+                x1 = x > x1 ? x : x1;
+            }
+        }
+    }
+    int w = x1 - x0 + 1, h = best_h;
+    unsigned char *rgba = (unsigned char *)calloc((size_t)w * (size_t)h, 4);
+    unsigned char *outside = (unsigned char *)calloc((size_t)w * (size_t)h, 1);
+    int *stack = (int *)malloc((size_t)w * (size_t)h * sizeof(int));
+    if (!rgba || !outside || !stack) {
+        free(rgba);
+        free(outside);
+        free(stack);
+        return;
+    }
+    int sp = 0;
+    for (int yy = 0; yy < h; yy++) { /* the black cells on the border of the cut start the flood */
+        for (int xx = 0; xx < w; xx++) {
+            int border = yy == 0 || yy == h - 1 || xx == 0 || xx == w - 1;
+            if (border && !(pic[(best_y0 + yy) * 256 + x0 + xx] & 0xFFFFFF) && !outside[yy * w + xx]) {
+                outside[yy * w + xx] = 1;
+                stack[sp++] = yy * w + xx;
+            }
+        }
+    }
+    while (sp > 0) {
+        int c = stack[--sp], cx = c % w, cy = c / w;
+        const int nx[4] = {cx - 1, cx + 1, cx, cx}, ny[4] = {cy, cy, cy - 1, cy + 1};
+        for (int k = 0; k < 4; k++) {
+            if (nx[k] >= 0 && nx[k] < w && ny[k] >= 0 && ny[k] < h && !outside[ny[k] * w + nx[k]] && !(pic[(best_y0 + ny[k]) * 256 + x0 + nx[k]] & 0xFFFFFF)) {
+                outside[ny[k] * w + nx[k]] = 1;
+                stack[sp++] = ny[k] * w + nx[k];
+            }
+        }
+    }
+    for (int yy = 0; yy < h; yy++) {
+        for (int xx = 0; xx < w; xx++) {
+            uint32_t c = pic[(best_y0 + yy) * 256 + x0 + xx];
+            unsigned char *o = &rgba[((size_t)yy * (size_t)w + (size_t)xx) * 4];
+            o[0] = (unsigned char)(c >> 16);
+            o[1] = (unsigned char)(c >> 8);
+            o[2] = (unsigned char)c;
+            o[3] = outside[yy * w + xx] ? 0 : 255;
+        }
+    }
+    rom_logo = ui_image_from_rgba(rgba, w, h);
+    free(rgba);
+    free(outside);
+    free(stack);
 }
 
 void menu_set_keys(const MenuKeys *k) {
@@ -454,8 +540,13 @@ static void draw_edition(const Env *e, int ed, float x, float y, float w, float 
         text_centred(e, font_title, 22, &tq, WHITE, INK, tag);
     }
     if (ed == 0) {
-        ui_text(e->ui, font_title, 64.0f * e->s, X(e, x + 40), Y(e, y + 130), 0x2F6FD6, "TMNT");
-        ui_text_outlined(e->ui, font_title, 64.0f * e->s, X(e, x + 40), Y(e, y + 130), YELLOW, INK, 3.0f * e->s, "TMNT");
+        if (rom_logo) { /* the logo of the title screen of the game, as it is */
+            float lh = 118.0f, lw = lh * (float)ui_image_w(rom_logo) / (float)ui_image_h(rom_logo);
+            ui_image_draw(e->ui, rom_logo, X(e, x + (w - lw) * 0.5f), Y(e, y + 34), lw * e->s, lh * e->s, 255, 1);
+        } else {
+            ui_text(e->ui, font_title, 64.0f * e->s, X(e, x + 40), Y(e, y + 130), 0x2F6FD6, "TMNT");
+            ui_text_outlined(e->ui, font_title, 64.0f * e->s, X(e, x + 40), Y(e, y + 130), YELLOW, INK, 3.0f * e->s, "TMNT");
+        }
         ui_text_wrapped(e->ui, font_body, 25.0f * e->s, X(e, x + 40), Y(e, y + 190), (w - 100) * e->s, 31.0f * e->s, INK, original_text);
         ui_text_wrapped(e->ui, font_body, 21.0f * e->s, X(e, x + 40), Y(e, y + 250), (w - 100) * e->s, 27.0f * e->s, INK, original_text2);
     } else {

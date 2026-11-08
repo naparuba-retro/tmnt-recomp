@@ -928,6 +928,17 @@ static int menu_shots(const char *dir) {
     }
     menu_init(data, NULL);
     menu_set_keys(&test_keys);
+    if (getenv("TMNT_MENU_TITLE")) { /* a title screen as raw 0x00RRGGBB words (256 x 240), to look at the logo that the menu cuts out of it */
+        static uint32_t title[256 * 240];
+        FILE *tf = fopen(getenv("TMNT_MENU_TITLE"), "rb");
+        if (tf) {
+            size_t got = fread(title, sizeof title[0], 256 * 240, tf);
+            fclose(tf);
+            if (got == 256 * 240) {
+                menu_set_logo_picture(title);
+            }
+        }
+    }
     if (getenv("TMNT_MENU_EDITION")) { /* to look at the page with an edition chosen (and one line changed with TMNT_MENU_MODIFIED) */
         options_apply_edition(atoi(getenv("TMNT_MENU_EDITION")));
         if (getenv("TMNT_MENU_MODIFIED")) {

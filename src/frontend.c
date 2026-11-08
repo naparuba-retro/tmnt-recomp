@@ -499,6 +499,33 @@ static void draw_fps(int fps) {
     }
 }
 
+/* TMNT_FRAMELOG=<file>: the frames whose parts took long (poll of the keyboard and the pad, wait for the sound card, logic and drawing), to find a stall. */
+static double now_ms(void) {
+    struct timespec t;
+    timespec_get(&t, TIME_UTC);
+    return (double)t.tv_sec * 1000.0 + (double)t.tv_nsec / 1e6;
+}
+
+static void frame_log(unsigned frame, double poll, double wait, double run, int pad) {
+    static FILE *f;
+    static int tried;
+    if (!tried) {
+        tried = 1;
+        if (getenv("TMNT_FRAMELOG")) {
+            f = fopen(getenv("TMNT_FRAMELOG"), "w");
+        }
+    }
+    static int last_pad = -1;
+    if (f && pad != last_pad) { /* the pad that the game sees, with the clock, to compare with the moment of a key press */
+        fprintf(f, "t=%.0f frame %u pad %02X\n", now_ms(), frame, pad);
+        last_pad = pad;
+    }
+    if (f && (poll > 8.0 || wait > 40.0 || run > 12.0)) {
+        fprintf(f, "frame %u: poll %.1f ms, wait %.1f ms, logic+draw %.1f ms\n", frame, poll, wait, run);
+        fflush(f);
+    }
+}
+
 static void count_fps(void) {
     static struct timespec t0;
     static int frames, shown;
@@ -631,6 +658,22 @@ static void choose_ini_path(char *out, size_t size) {
     snprintf(out, size, "%s/tmnt.ini", dir);
 }
 
+/* The logo of the Original panel: the game is run without a window up to its title screen, which gives the menu its logo (the game restarts after). */
+static void cut_title_logo(Game *g) {
+    FILE *saved_input = input_log;
+    input_log = NULL;
+    reset_game(g);
+    g->frame = 0;
+    for (int i = 0; i < 400; i++) {
+        logic_frame(g, 0);
+    }
+    render(g);
+    menu_set_logo_picture(screen);
+    input_log = saved_input;
+    reset_game(g);
+    g->frame = 0;
+}
+
 /* "PLAY" in the menu: a new game with the options as they are, at the level chosen. */
 static void start_new_game(Game *g) {
     reset_game(g);
@@ -726,11 +769,14 @@ int main(int argc, char **argv) {
     }
     game_started = no_menu || start_level2 || pad_script_n > 0;
     if (!game_started) { /* the launcher: the menu on its first page, no game under it yet */
+        cut_title_logo(g);
         menu_open(0);
     }
     for (;;) {
         PlatformEvents ev;
+        double t_start = now_ms();
         platform_poll(&ev);
+        double t_poll = now_ms() - t_start;
         if (ev.quit) {
             break;
         }
@@ -812,7 +858,9 @@ int main(int argc, char **argv) {
             g->frame = 0;
             frozen = 0;
         }
+        double t_wait0 = now_ms();
         platform_wait_frame();
+        double t_wait = now_ms() - t_wait0;
         if (ev.rewind && g->ram[GameMode] == 4 && snap_restore(g)) {
             paused = 0;
             frozen = 0;
@@ -820,9 +868,11 @@ int main(int argc, char **argv) {
         if (ev.capture) {
             capture(g);
         }
+        double t_run0 = now_ms();
         if (!paused && !frozen) {
             run_game_frame(g, audio);
         }
+        frame_log(g->frame, t_poll, t_wait, now_ms() - t_run0, g->pad);
         if (audio) {
             if (paused) {
                 memset(pcm, 0, sizeof pcm);

@@ -23,6 +23,8 @@ typedef struct {
     int (*default_code)(int row, int slot);
 } MenuKeys;
 void menu_set_keys(const MenuKeys *keys);
+/* The title screen of the game (256x240, 0xRRGGBB): the menu cuts the logo of the game out of it for the Original panel. Without it the panel shows a text. */
+void menu_set_logo_picture(const uint32_t *picture);
 
 typedef enum {
     MENU_NONE,

@@ -44,6 +44,7 @@ int ui_text_lines(UiFont *f, float size, float max_w, const char *utf8); /* how 
 
 /* Images: PNG (or anything stb_image reads) with alpha. */
 UiImage *ui_image_load(const char *path);
+UiImage *ui_image_from_rgba(const unsigned char *rgba, int w, int h); /* a copy of w * h pixels, 4 bytes each (R G B A) */
 int ui_image_w(const UiImage *im);
 int ui_image_h(const UiImage *im);
 void ui_image_draw(Ui *ui, const UiImage *im, float x, float y, float w, float h, int alpha, int smooth);

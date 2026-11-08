@@ -472,6 +472,22 @@ UiImage *ui_image_load(const char *path) {
     return im;
 }
 
+UiImage *ui_image_from_rgba(const unsigned char *rgba, int w, int h) {
+    UiImage *im = (UiImage *)calloc(1, sizeof *im);
+    if (!im) {
+        return NULL;
+    }
+    im->rgba = (unsigned char *)malloc((size_t)w * (size_t)h * 4);
+    if (!im->rgba) {
+        free(im);
+        return NULL;
+    }
+    memcpy(im->rgba, rgba, (size_t)w * (size_t)h * 4);
+    im->w = w;
+    im->h = h;
+    return im;
+}
+
 int ui_image_w(const UiImage *im) {
     return im ? im->w : 0;
 }

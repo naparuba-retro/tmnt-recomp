@@ -389,7 +389,11 @@ static uint8_t xinput_pad(void) {
 }
 
 uint8_t platform_pad(void) {
-    if (GetForegroundWindow() != hwnd) {
+    static int any_focus = -1; /* TMNT_ANYFOCUS: tests that send keys without owning the foreground */
+    if (any_focus < 0) {
+        any_focus = getenv("TMNT_ANYFOCUS") != NULL;
+    }
+    if (!any_focus && GetForegroundWindow() != hwnd) {
         return 0;
     }
 #define K(vk) (GetAsyncKeyState(vk) & 0x8000)
