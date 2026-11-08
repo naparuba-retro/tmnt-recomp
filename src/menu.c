@@ -91,6 +91,10 @@ void menu_init(const char *data_dir, const char *ini_path) {
     snprintf(ini_file, sizeof ini_file, "%s", ini_path ? ini_path : "");
 }
 
+int menu_has_fonts(void) {
+    return font_title != NULL && font_body != NULL;
+}
+
 void menu_open(int running) {
     is_open = 1;
     game_running = running;

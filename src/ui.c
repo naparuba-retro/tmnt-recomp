@@ -286,6 +286,9 @@ typedef struct {
 static Glyph glyphs[GLYPH_SLOTS];
 
 static const Glyph *glyph_for(UiFont *f, float size, int cp) {
+    if (!f) {
+        return NULL; /* no font: no text (the callers skip a missing glyph) */
+    }
     int size4 = (int)(size * 4.0f + 0.5f);
     unsigned slot = ((unsigned)cp * 2654435761u + (unsigned)size4 * 40503u + (unsigned)(size_t)f) % GLYPH_SLOTS;
     for (int probe = 0; probe < GLYPH_SLOTS; probe++, slot = (slot + 1) % GLYPH_SLOTS) {

@@ -35,6 +35,8 @@ typedef enum {
     MENU_QUIT
 } MenuAction;
 
+int menu_has_fonts(void); /* the fonts of the menu were found (else it draws no text) */
+
 /* Loads the fonts and the logo from `data_dir` (the folder "data" of the game); `ini_path` is where the options are saved (may be NULL). */
 void menu_init(const char *data_dir, const char *ini_path);
 void menu_open(int game_running); /* game_running: a game is under the menu, RESUME is possible */
