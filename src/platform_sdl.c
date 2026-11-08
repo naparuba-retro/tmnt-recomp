@@ -15,6 +15,8 @@ static SDL_Window *window;
 static SDL_Renderer *renderer;
 static SDL_Texture *texture, *hd_texture;
 static int hd_w, hd_h, hd_mode, click_pending;
+static int key_bind[8][2]; /* the keys of the pad buttons: two per button (an SDL scancode, 0 = none) */
+static int captured_key;
 static unsigned char tap_latch[8]; /* per pad bit: frames left of a key press that was too short to be seen (key down and up in the same pump of events) */
 static SDL_AudioDeviceID audio_dev;
 static PlatformEvents pending;
@@ -93,9 +95,6 @@ static SDL_GameController *get_controller(void);
 #define START_PAIR_MS 300
 
 /* The keys of the pad buttons: two per button (an SDL scancode, 0 = none). */
-static int key_bind[8][2];
-static int captured_key;
-
 int platform_default_key(int bit, int slot) { /* the labels Z and W: B is at the Z position of a QWERTY keyboard and of an AZERTY one */
     switch (bit) {
         case 7:

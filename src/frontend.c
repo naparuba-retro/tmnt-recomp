@@ -670,7 +670,7 @@ static void choose_ini_path(char *out, size_t size) {
         return;
     }
     const char *base = getenv("APPDATA");
-    char dir[1100];
+    char dir[1000];
     if (base) {
         snprintf(dir, sizeof dir, "%s/tmnt", base);
     } else if (getenv("XDG_CONFIG_HOME")) {
