@@ -14,7 +14,7 @@ It is not an emulator: the game logic is real C, only the NES hardware (picture,
 
 **The ROM is not included.** You need your own copy of the game, the European (PAL) or the American (USA) release, as a `.nes` file.
 
-<p><img src="images/menu_play_original.png" alt="The menu" width="70%"></p>
+<p><img src="images/menu_play_whole_pizza.png" alt="The menu" width="70%"></p>
 
 ## Play
 
