@@ -405,7 +405,7 @@ static const char *focus_description(void) {
         return opt_info((OptId)focus_arg)->description;
     }
     if (focus_kind == K_EDITION) {
-        return focus_arg == 0 ? "Everything switched off: the game exactly as it was in 1990, checked against the original."
+        return focus_arg == 0 ? "Everything switched off: the game exactly as it was in 1989, checked against the original."
                               : "Every fix and option of the Whole Pizza edition switched on. Click a line to switch it off.";
     }
     if (focus_kind == K_LEVEL) {
@@ -574,8 +574,20 @@ static void draw_controls_page(const Env *e) {
         "OTHER KEYS: ESC MENU / P PAUSE / M MUTE / F5 RESTART / F9 REWIND / F10 CAPTURE / F11 FULLSCREEN.   A key that the pad uses loses its shortcut.");
 }
 
-static const char *const original_text = "THE GAME EXACTLY AS IT WAS IN 1990.";
+static const char *const original_text = "THE GAME EXACTLY AS IT WAS IN 1989.";
 static const char *const original_text2 = "CHECKED BIT FOR BIT AGAINST THE ORIGINAL (A 15 MINUTE SPEED RUN REPLAYS WITHOUT ONE DIFFERENCE).";
+
+/* A quad a little larger than another (its outline and the soft edge are outside it), to grey a panel entirely. */
+static UiQuad grown(const UiQuad *q, float px) {
+    float cx, cy;
+    centre(q, &cx, &cy);
+    UiQuad g = *q;
+    for (int i = 0; i < 4; i++) {
+        g.x[i] += (q->x[i] > cx ? px : -px);
+        g.y[i] += (q->y[i] > cy ? px : -px);
+    }
+    return g;
+}
 
 static void draw_edition(const Env *e, int ed, float x, float y, float w, float h) {
     UiQuad q = quad(e, x, y, w, h, 12);
@@ -635,6 +647,12 @@ static void draw_edition(const Env *e, int ed, float x, float y, float w, float 
                                ? opt_info((OptId)focus_arg)->description
                                : "Click a tick to switch one line on or off. Click anywhere else in the panel for the whole edition.";
         ui_text_wrapped(e->ui, font_body, 18.0f * e->s, X(e, x + w - 278), Y(e, y + h - 142), 242 * e->s, 23.0f * e->s, INK, text);
+    }
+    if (!selected && !(focus_kind == K_EDITION && focus_arg == ed) &&
+        !(ed == 1 && focus_in_whole_pizza())) { /* the edition that is not chosen is in grey (colour again when it has the focus or the mouse) */
+        UiQuad all = grown(&q, 8.0f * e->s), title = grown(&cap, 7.0f * e->s);
+        ui_desaturate_quad(e->ui, &all);
+        ui_desaturate_quad(e->ui, &title);
     }
 }
 

@@ -42,7 +42,7 @@ The keys can be changed in the menu (CONTROLS page).
 Esc opens it (it is also the launcher at start). Mouse, keyboard and pad all work.
 
 - **PLAY**: choose the edition, the extras and the level, then play or resume.
-  **Original** is the game exactly as it was in 1990. **Whole Pizza** switches on a set of fixes and options (see [FIXES.md](FIXES.md)); click a tick to switch one off.
+  **Original** is the game exactly as it was in 1989. **Whole Pizza** switches on a set of fixes and options (see [FIXES.md](FIXES.md)); click a tick to switch one off. The edition that is not chosen is shown in grey (in colour again when you point at it).
 - **SOUND**: volume, mute.
 - **GRAPHICS**: large view, no flicker, hitbox view, fullscreen, integer scaling, show FPS, and a **CRT filter** (scanlines, phosphor mask, curved screen).
 - **CONTROLS**: change the keyboard keys, see the pad.

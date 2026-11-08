@@ -114,6 +114,28 @@ static float quad_dist(const UiQuad *q, float px, float py) {
     return best;
 }
 
+void ui_desaturate_quad(Ui *ui, const UiQuad *q) {
+    float x0 = q->x[0], x1 = q->x[0], y0 = q->y[0], y1 = q->y[0];
+    for (int i = 1; i < 4; i++) {
+        x0 = q->x[i] < x0 ? q->x[i] : x0;
+        x1 = q->x[i] > x1 ? q->x[i] : x1;
+        y0 = q->y[i] < y0 ? q->y[i] : y0;
+        y1 = q->y[i] > y1 ? q->y[i] : y1;
+    }
+    int ix0 = (int)floorf(x0) < 0 ? 0 : (int)floorf(x0), ix1 = (int)ceilf(x1) > ui->w ? ui->w : (int)ceilf(x1);
+    int iy0 = (int)floorf(y0) < 0 ? 0 : (int)floorf(y0), iy1 = (int)ceilf(y1) > ui->h ? ui->h : (int)ceilf(y1);
+    for (int y = iy0; y < iy1; y++) {
+        for (int x = ix0; x < ix1; x++) {
+            if (!ui_quad_contains(q, (float)x + 0.5f, (float)y + 0.5f)) {
+                continue;
+            }
+            uint32_t c = ui->px[(size_t)y * (size_t)ui->w + (size_t)x];
+            uint32_t lum = (299u * ((c >> 16) & 255u) + 587u * ((c >> 8) & 255u) + 114u * (c & 255u)) / 1000u;
+            ui->px[(size_t)y * (size_t)ui->w + (size_t)x] = (lum << 16) | (lum << 8) | lum;
+        }
+    }
+}
+
 int ui_quad_contains(const UiQuad *q, float x, float y) {
     return quad_dist(q, x, y) >= 0.0f;
 }

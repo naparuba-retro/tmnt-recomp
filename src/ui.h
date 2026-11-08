@@ -32,6 +32,8 @@ void ui_halftone_quad(Ui *ui, const UiQuad *q, uint32_t colour, float cell, floa
 void ui_fill_burst(Ui *ui, float cx, float cy, float r_out, float r_in, int points, float rot, uint32_t colour); /* the pointed star of a comic-book "POW!" */
 void ui_fill_triangle(Ui *ui, float x0, float y0, float x1, float y1, float x2, float y2, uint32_t colour);
 int ui_quad_contains(const UiQuad *q, float x, float y);
+/* The pixels inside the quad lose their colour (they become the grey of their brightness). */
+void ui_desaturate_quad(Ui *ui, const UiQuad *q);
 
 /* Fonts: TrueType files read once. `size` is the height of the em in pixels. */
 UiFont *ui_font_load(const char *path); /* NULL if the file cannot be read */
