@@ -7,9 +7,11 @@ A C port of the NES game **Teenage Mutant Ninja Turtles** (Konami, 1989), writte
 <br clear="left">
 
 **What you get**
-- The original game, **exactly** as it was (checked frame by frame against emulators, including a 15 minute speed run).
+- The original game, identical to the 1989 one on everything that was checked: the console's memory matches frame by frame along a 15 minute speed run (55 530 frames),
+  and a complete game from the title screen to the end (127 500 frames) replays without any difference. The paths that these runs never take, and the
+  randomness (a model with the same law, not the same sequence), are listed in [TECHNICAL.md](TECHNICAL.md).
 - An in-game **menu** to choose your options and your level.
-- An optional **Whole Pizza** edition: the original game plus a set of fixes and improvements (listed below).
+- An optional **Whole Pizza** edition: the original game plus **fixes** (flaws of the original, each with its evidence) and a few **fairness and balance** options (suggestions of the author, kept apart). Listed below.
 - Display options: fullscreen, integer scaling, FPS counter, and a CRT filter.
 
 It is not an emulator: the game logic is real C, only the NES hardware (picture, sound) is emulated.
@@ -68,19 +70,35 @@ Your choices are saved in `tmnt.ini`, next to the game. Delete this file to get 
 
 **Whole Pizza** is the same game with the options below switched on. In the menu you can switch each one off with its tick, and the edition then shows as "modified".
 
+### Fixes
+
+Flaws of the original that betray what its designers meant, each one with evidence (the code, the original game itself, or an outside source).
+
 | Option | What it does |
 |---|---|
 | **Ceiling slide** | Hitting a ceiling during a jump no longer stops the turtle's sideways speed. |
 | **Water current** | Fixes the dreaded seaweed passage of the dam level: the current no longer pushes the swimming turtle forever. |
 | **Hitbox fixes** | The rotating bar of the dam has a hit box that matches what you see. |
 | **Smart camera** | The camera catches up with a turtle that is far to one side of the screen. |
+
+### Fairness and balance
+
+These are **suggestions of the author**, not corrections: they change the difficulty, not a flaw. They are kept apart on purpose.
+
+| Option | What it does |
+|---|---|
 | **Spawn mask** | A fairer game: removes the enemies that are placed in a sneaky way (only the ones still to come, never the bosses). |
 | **Damage balance** | The normal attacks hit harder: Leonardo 7 to 14, Raphael 9 to 20, Michelangelo 7 to 14 (Donatello stays at 15). |
 | **Raph's reach** | The sai of Raphael reaches 35 pixels in front of him instead of 28. |
+
+### Display (no effect on the game)
+
+| Option | What it does |
+|---|---|
 | **Large view** | No more random tiles at the top and the edges of the screen: they show the map instead. |
 | **No flicker** | All the sprites of a line are drawn, not only 8: no more blinking sprites. |
 
-Each fix is explained, with its evidence from the original game, in [FIXES.md](FIXES.md). The water current and the hitbox fixes rely on the work of Upsilandre in
+Each fix and each balance option is explained, with its evidence, in [FIXES.md](FIXES.md). The water current and the hitbox fixes rely on the work of Upsilandre in
 [Tous les secrets de Teenage Mutant Ninja Turtles](https://upsilandre.over-blog.com/2022/06/tous-les-secrets-de-teenage-mutant-ninja-turtles.html).
 
 ## Command line (optional)

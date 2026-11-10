@@ -1,6 +1,11 @@
 # Fixes ("Whole Pizza" edition)
 
-The port plays the original game exactly: it replays the reference TAS 1:1. The fixes below are corrections of the original game, **off by default**. Each one
+The port plays the original game: it replays the reference TAS 1:1 (see TECHNICAL.md for what is and is not covered by that). The entries below are in two groups:
+
+- **Fixes** (PIZZA-001 to 004): corrections of flaws of the original, accepted only with evidence: the code, an inconsistency inside the game, or a serious outside source.
+- **Fairness and balance** (PIZZA-005 to 007): suggestions of the author. They change the difficulty, they do not claim to restore what the designers meant, and they are kept apart on purpose.
+
+All of them are **off by default**. Each one
 has a flag in the code (`src/fixes.h`), a sheet here with its evidence, and its effect on the TAS. With every flag off the port is bit-exact with the original
 (the reference game and the TAS replay without any difference); that is checked by `tools/verify_all.sh`.
 
@@ -13,12 +18,18 @@ How to switch them on, for tests and demonstrations:
 - the balance options (PIZZA-006 and PIZZA-007) are a fourth group: the **R** key (title: `BALANCE (R)`), or `--balance`, or `TMNT_BALANCE=1` in the replay tool;
 - in the replay tool, the environment variable `TMNT_FIXES=1` (all of them; `TMNT_FIXES=1 bash tools/verify_all.sh` shows where the replays leave the original's) `TMNT_WATER_FIXES=1` (the water ones only) or `TMNT_CAMERA_FIX=1` (the camera one).
 
+### Fixes
+
 | Id | Fix | Evidence | Effect on the TAS |
 |---|---|---|---|
 | PIZZA-001 | Hitting a ceiling in a jump no longer stops the horizontal speed of the turtle | the code, and the original game itself (BizHawk) | the TAS leaves the original's at image 3921 |
 | PIZZA-002 (water, key E) | The current of the water no longer leaves a speed that pushes the swimming turtle for ever | the code, the TAS (BizHawk), and Upsilandre's blog | the TAS leaves the original's at image 10854 |
 | PIZZA-003 (water, key E) | The rotating bar of the dam has a box that matches its sprite | the code, a measure in the TAS, and Upsilandre's blog | none by itself (the TAS already leaves the original's at 10854) |
 | PIZZA-004 (camera, key C) | The camera catches up with a turtle that is far to one side of the screen | the code, and a recorded game (`sessions/camera_midboss`) | none (the TAS never gets there with the fix off; the fix is off in the replays) |
+### Fairness and balance (suggestions of the author)
+
+| Id | Option | Evidence | Effect on the TAS |
+|---|---|---|---|
 | PIZZA-005 (spawn mask, key S) | Enemy spawns listed in a file written by the spawn editor (`spawn_editor/`) are not created, one by one and per sprite set; the bosses never | the editor and `sessions/spawn_mask` (`bash tools/spawn_mask_check.sh`) | none (the option is off in the replays; with an empty or wrong mask the RAM is identical to the original's on 1916 frames) |
 | PIZZA-006 (balance, key R) | The damage of a normal attack is raised for Leonardo (7 to 14), Raphael (9 to 20) and Michelangelo (7 to 14); Donatello stays at 15 | the damage table of the game (bank 6 `$9BCB`) and a measure on the four turtles (`bash tools/balance_check.sh`) | none (the option is off in the replays) |
 | PIZZA-007 (balance, key R) | The hit box of Raphael's sai is 7 pixels wider each side: 35 pixels of reach in front of him instead of 28 | the hit box tables of the game (bank 6 `$8935`, `$8A43`) and a measure with dummy enemies (`bash tools/balance_check.sh`) | none (off in the replays) |
