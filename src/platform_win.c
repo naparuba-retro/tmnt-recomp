@@ -288,6 +288,9 @@ static LRESULT CALLBACK wndproc(HWND h, UINT m, WPARAM w, LPARAM l) {
 }
 
 int platform_init(const char *title) {
+    /* DPI aware: without it, on a screen set to 125 % or 150 %, Windows draws the window at its logical size and stretches the result to the real pixels, so the picture is
+     * scaled twice, by two different ratios: columns and rows of pixels that come and go (a thin vertical line that blinks near the letters). */
+    SetProcessDPIAware();
     WNDCLASSA wc = {0};
     wc.lpfnWndProc = wndproc;
     wc.hInstance = GetModuleHandle(NULL);

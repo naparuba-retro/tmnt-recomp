@@ -10,6 +10,7 @@ typedef struct {
     int mask;      /* 0 to 100: the strength of the RGB phosphor mask (it fades away when the picture is not much larger than the game's) */
     int curve;     /* 0 to 100: the curvature of the screen (0 = flat: the fast path) */
     int integer;   /* the picture is a whole multiple of 256x240 (otherwise the largest one that fits) */
+    int plain; /* no CRT look at all: only a sharp bilinear stretch (each game pixel stays a clean block with a one pixel soft edge), for a window that is not a whole multiple */
 } CrtParams;
 
 /* Draws `src` (256x240, 0xRRGGBB) into `out` (w * h, 0xRRGGBB). */

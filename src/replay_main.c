@@ -990,8 +990,8 @@ static int menu_shots(const char *dir) {
             if (got == 256 * 240) {
                 Ui cu = {0};
                 ui_resize(&cu, w, h);
-                for (int curved = 0; curved < 2; curved++) {
-                    CrtParams cp = {70, 40, curved ? 40 : 0, 0};
+                for (int curved = 0; curved < 3; curved++) {
+                    CrtParams cp = {70, 40, curved == 1 ? 40 : 0, 0, curved == 2};
                     crt_render(cu.px, w, h, pic, &cp);
                     clock_t t0 = clock();
                     for (int rep = 0; rep < 20; rep++) {
@@ -999,7 +999,7 @@ static int menu_shots(const char *dir) {
                     }
                     printf("crt %s %dx%d: %.1f ms per picture\n", curved ? "curved" : "flat", w, h, (double)(clock() - t0) * 1000.0 / CLOCKS_PER_SEC / 20.0);
                     char cn[600];
-                    snprintf(cn, sizeof cn, "%s/crt_%s.bmp", dir, curved ? "curved" : "flat");
+                    snprintf(cn, sizeof cn, "%s/crt_%s.bmp", dir, curved == 2 ? "plain" : curved ? "curved" : "flat");
                     write_bmp24(cn, &cu);
                 }
             }

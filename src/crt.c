@@ -180,24 +180,32 @@ static void rebuild(int w, int h, const CrtParams *p) {
     st.sharp = scale_x * 0.9f > 1.0f ? scale_x * 0.9f : 1.0f;
 
     /* the beam: exp2(hard * d * d), normalised so that the average brightness stays the same whatever the strength (the peaks may reach a little over 1) */
-    double hard = -(p->scanlines / 100.0) * 14.0, avg = 0.0, g[257];
-    for (int i = 0; i <= 256; i++) {
-        double d = i / 256.0;
-        g[i] = exp2(hard * d * d);
-    }
-    for (int i = 0; i <= 256; i++) {
-        avg += g[i] + g[256 - i];
-    }
-    avg /= 257.0;
-    double norm = 1.0 / avg;
-    norm = norm > 1.6 ? 1.6 : norm;
-    for (int i = 0; i <= 256; i++) {
-        st.beam[i] = (uint16_t)(g[i] * norm * 256.0 + 0.5);
+    if (p->plain) { /* sharp bilinear: the weight of the nearer game row goes from 1 to 0 over about one window pixel, so the rows are not mixed more than needed */
+        float sharp_y = (float)ph / SH * 0.9f > 1.0f ? (float)ph / SH * 0.9f : 1.0f;
+        for (int i = 0; i <= 256; i++) {
+            float k = ((float)i / 256.0f - 0.5f) * sharp_y + 0.5f;
+            st.beam[i] = (uint16_t)((1.0f - (k < 0 ? 0 : k > 1 ? 1 : k)) * 256.0f + 0.5f);
+        }
+    } else {
+        double hard = -(p->scanlines / 100.0) * 14.0, avg = 0.0, g[257];
+        for (int i = 0; i <= 256; i++) {
+            double d = i / 256.0;
+            g[i] = exp2(hard * d * d);
+        }
+        for (int i = 0; i <= 256; i++) {
+            avg += g[i] + g[256 - i];
+        }
+        avg /= 257.0;
+        double norm = 1.0 / avg;
+        norm = norm > 1.6 ? 1.6 : norm;
+        for (int i = 0; i <= 256; i++) {
+            st.beam[i] = (uint16_t)(g[i] * norm * 256.0 + 0.5);
+        }
     }
 
     float fade = (scale_x - 1.5f) / 1.5f; /* the mask needs several window pixels per game pixel */
     fade = fade < 0 ? 0 : fade > 1 ? 1 : fade;
-    float m = p->mask / 100.0f * fade;
+    float m = p->plain ? 0.0f : p->mask / 100.0f * fade;
     st.mask_lit = (int)(256.0f * (1.0f + 0.5f * m) + 0.5f);
     st.mask_dark = (int)(256.0f * (1.0f - 0.5f * m) + 0.5f);
 
@@ -434,8 +442,10 @@ void crt_render(uint32_t *out, int w, int h, const uint32_t *src, const CrtParam
         lin[i * 3 + 1] = lut_in[(c >> 8) & 255];
         lin[i * 3 + 2] = lut_in[c & 255];
     }
-    add_glow();
-    if (p->curve > 0) {
+    if (!p->plain) {
+        add_glow();
+    }
+    if (p->curve > 0 && !p->plain) {
         render_curved(out, w, p);
     } else {
         render_flat(out, w);

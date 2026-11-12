@@ -261,14 +261,35 @@ static int dump_mode(Game *g, int frames, const char *base) {
     fwrite("data", 1, 4, w);
     put32(w, bytes);
     g->frame = 0;
+    int shot_from =
+        getenv("TMNT_DUMP_FROM") ? atoi(getenv("TMNT_DUMP_FROM")) : 0; /* TMNT_DUMP_FROM / TMNT_DUMP_TO: a picture of every frame of that range (name_N.bmp) */
+    int shot_to = getenv("TMNT_DUMP_TO") ? atoi(getenv("TMNT_DUMP_TO")) : 0;
+    FILE *hash_log = getenv("TMNT_DUMP_HASH") ? fopen(getenv("TMNT_DUMP_HASH"), "w") : NULL;
     for (int f = 1; f <= frames; f++) {
         logic_frame(g, 0);
+        if (hash_log) { /* TMNT_DUMP_HASH=<file>: for every frame, a hash of the top 12 rows and of the rest of the picture (to look for blinking) */
+            render(g);
+            unsigned long long ht = 14695981039346656037ull, hr = ht;
+            for (int i = 0; i < SCREEN_W * SCREEN_H; i++) {
+                unsigned long long *h = i < SCREEN_W * 12 ? &ht : &hr;
+                *h = (*h ^ screen[i]) * 1099511628211ull;
+            }
+            fprintf(hash_log, "%d %llx %llx%c", f, ht, hr, 10);
+        }
+        if (shot_from && f >= shot_from && f <= shot_to) {
+            render(g);
+            snprintf(name, sizeof name, "%s_%d.bmp", base, f);
+            write_bmp(name);
+        }
         apu_mix(g, pcm, SAMPLES_PER_FRAME);
         for (int i = 0; i < SAMPLES_PER_FRAME; i++) {
             put16(w, (uint16_t)pcm[i]);
         }
     }
     fclose(w);
+    if (hash_log) {
+        fclose(hash_log);
+    }
     render(g);
     snprintf(name, sizeof name, "%s.bmp", base);
     write_bmp(name);
@@ -600,12 +621,13 @@ static int keys_default(int row, int slot) {
 
 static const MenuKeys menu_keys = {keys_name, keys_default};
 
-/* The picture of the game, plain or with the CRT look (drawn by the processor at the size of the window, with the proportions kept). */
+/* The picture of the game: with the CRT look, or stretched by crt.c with a sharp bilinear filter (without Integer scaling, the window is rarely a whole multiple of 256x240,
+ * and the window's own stretch gives pixels that are 4 or 5 wide at random: lines), or by the window itself when it is a whole multiple. The picture of the game, plain or with the CRT look (drawn by the processor at the size of the window, with the proportions kept). */
 static void present_game(void) {
     static uint32_t *crt_buf;
     static int crt_w, crt_h, crt_div = 1, calm;
     static double crt_avg;
-    if (!opt_get(OPT_CRT)) {
+    if (!opt_get(OPT_CRT) && opt_get(OPT_INTEGER_SCALE)) { /* a whole multiple: the window can stretch it block by block */
         platform_present(screen);
         return;
     }
@@ -624,7 +646,7 @@ static void present_game(void) {
         return;
     }
     double t0 = now_ms();
-    CrtParams p = {opt_get(OPT_CRT_SCAN), opt_get(OPT_CRT_MASK), opt_get(OPT_CRT_CURVE), opt_get(OPT_INTEGER_SCALE)};
+    CrtParams p = {opt_get(OPT_CRT_SCAN), opt_get(OPT_CRT_MASK), opt_get(OPT_CRT_CURVE), opt_get(OPT_INTEGER_SCALE), !opt_get(OPT_CRT)};
     crt_render(crt_buf, rw, rh, screen, &p);
     platform_present_hd(crt_buf, rw, rh);
     double dt = now_ms() - t0;
