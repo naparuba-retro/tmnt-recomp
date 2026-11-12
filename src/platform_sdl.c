@@ -334,7 +334,9 @@ void platform_present_hd(const uint32_t *argb, int w, int h) {
         if (hd_texture) {
             SDL_DestroyTexture(hd_texture);
         }
+        SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear"); /* the menu may be drawn smaller than the window: smooth stretch */
         hd_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, w, h);
+        SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
         hd_w = w;
         hd_h = h;
     }
@@ -408,7 +410,35 @@ void platform_wait_frame(void) {
     last_tick = t;
 }
 
+/* TMNT_AUDIOLOG=<file>: why the sound crackles (see platform_win.c): the number of frames of sound still queued when the next one is added, every 5 seconds. */
+static void audio_log_frame(void) {
+    static FILE *alog;
+    static int tried, frames, underruns, min_frames = 99;
+    static Uint32 last_ms;
+    if (!tried) {
+        tried = 1;
+        const char *path = getenv("TMNT_AUDIOLOG");
+        alog = path ? fopen(path, "w") : NULL;
+        last_ms = SDL_GetTicks();
+    }
+    if (!alog) {
+        return;
+    }
+    int queued = (int)(SDL_GetQueuedAudioSize(audio_dev) / (SAMPLES_PER_FRAME * sizeof(int16_t)));
+    frames++;
+    underruns += SDL_GetQueuedAudioSize(audio_dev) == 0;
+    min_frames = queued < min_frames ? queued : min_frames;
+    if (SDL_GetTicks() - last_ms >= 5000) {
+        fprintf(alog, "%d frames: fewest frames of sound queued %d, underruns %d\n", frames, min_frames, underruns);
+        fflush(alog);
+        frames = underruns = 0;
+        min_frames = 99;
+        last_ms = SDL_GetTicks();
+    }
+}
+
 void platform_audio_submit(const int16_t *pcm) {
+    audio_log_frame();
     SDL_QueueAudio(audio_dev, pcm, SAMPLES_PER_FRAME * sizeof(int16_t));
 }
 

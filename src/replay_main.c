@@ -380,7 +380,27 @@ static void dump_outputs(Replay *r) {
         uint32_t frame = g->frame;
         ppu_render(g, r->picture);
         fwrite(&frame, 4, 1, stdout);
-        fwrite(r->picture, 1, sizeof r->picture, stdout);
+        if (getenv("TMNT_PIXRGB")) { /* videos only: RGB bytes, with the hit boxes of the H key drawn (needs TMNT_HITBOX=1) */
+            static const uint32_t pal[64] = {
+                0x666666, 0x002A88, 0x1412A7, 0x3B00A4, 0x5C007E, 0x6E0040, 0x6C0600, 0x561D00, 0x333500, 0x0B4800, 0x005200, 0x004F08, 0x00404D,
+                0x000000, 0x000000, 0x000000, 0xADADAD, 0x155FD9, 0x4240FF, 0x7527FE, 0xA01ACC, 0xB71E7B, 0xB53120, 0x994E00, 0x6B6D00, 0x388700,
+                0x0D9300, 0x008F32, 0x007C8D, 0x000000, 0x000000, 0x000000, 0xFFFEFF, 0x64B0FF, 0x9290FF, 0xC676FF, 0xF36AFF, 0xFE6ECC, 0xFE8170,
+                0xEA9E22, 0xBCBE00, 0x88D800, 0x5CE430, 0x45E082, 0x48CDDE, 0x4F4F4F, 0x000000, 0x000000, 0xFFFEFF, 0xC0DFFF, 0xD3D2FF, 0xE8C8FF,
+                0xFBC2FF, 0xFEC4EA, 0xFECCC5, 0xF7D8A5, 0xE4E594, 0xCFEF96, 0xBDF4AB, 0xB3F3CC, 0xB5EBF2, 0xB8B8B8, 0x000000, 0x000000,
+            };
+            static uint32_t rgb[256 * 240];
+            for (int i = 0; i < 256 * 240; i++) {
+                rgb[i] = pal[r->picture[i] & 63];
+            }
+            hitbox_draw(g, rgb);
+            for (int i = 0; i < 256 * 240; i++) {
+                fputc((int)((rgb[i] >> 16) & 255), stdout);
+                fputc((int)((rgb[i] >> 8) & 255), stdout);
+                fputc((int)(rgb[i] & 255), stdout);
+            }
+        } else {
+            fwrite(r->picture, 1, sizeof r->picture, stdout);
+        }
     }
     if (dir && r->step && g->frame % r->step == 0) {
         if (getenv("TMNT_LARGE_PIX")) { /* tests only: the pictures are drawn with the large view */
@@ -572,9 +592,9 @@ static void run_frame(Replay *r) {
         check_large_edges(g);
     }
     if (check_camera) {
-        int far = camera_far_from_player(g);
-        camera_frames[far]++;
-        camera_run = far ? camera_run + 1 : 0;
+        int is_far = camera_far_from_player(g);
+        camera_frames[is_far]++;
+        camera_run = is_far ? camera_run + 1 : 0;
         if (camera_run > camera_longest) {
             camera_longest = camera_run;
             camera_longest_end = g->frame;
@@ -587,6 +607,7 @@ static void run_frame(Replay *r) {
         sound_update(g); /* measured "lost" frames */
     }
     apply_pokes(r);
+    hitbox_end_frame(g); /* videos only (TMNT_PIXRGB): the journal that hitbox_draw reads; it only fills while the hit box journal is on */
     dump_outputs(r);
     log_events(r);
 }
@@ -716,6 +737,7 @@ static int menu_logic_tests(const char *dir, Ui *ui) {
         all |= opt_get((OptId)id);
     }
     menu_expect(!all && options_edition_matches(0) && opt_get(OPT_EDITION) == 0, "a click on Original switches everything off");
+    menu_flush();
     FILE *f = fopen(ini, "r");
     char text[2000] = "";
     if (f) {
@@ -726,6 +748,7 @@ static int menu_logic_tests(const char *dir, Ui *ui) {
     menu_expect(f != NULL && !strstr(text, "smart_camera") && !strstr(text, "edition="),
                 "tmnt.ini holds only what differs from the defaults (everything is default again)");
     menu_click(ui, MENU_ITEM_EDITION, 1);
+    menu_flush();
     f = fopen(ini, "r");
     if (f) {
         size_t n = fread(text, 1, sizeof text - 1, f);
@@ -738,6 +761,7 @@ static int menu_logic_tests(const char *dir, Ui *ui) {
     fprintf(f, "future_key=7\n; my comment\n");
     fclose(f);
     menu_click(ui, MENU_ITEM_OPTION, OPT_FIX_CAMERA);
+    menu_flush();
     f = fopen(ini, "r");
     size_t n = fread(text, 1, sizeof text - 1, f);
     text[n] = 0;
@@ -911,6 +935,7 @@ static int menu_logic_tests(const char *dir, Ui *ui) {
         menu_click(ui, MENU_ITEM_KEY, 0);
         menu_step(ui, (MenuInput){.mouse_x = -1, .mouse_y = -1, .key = 100});
         menu_expect(opt_get((OptId)(OPT_KEY_FIRST + 0)) == 0, "choosing the default key of a box stores nothing");
+        menu_flush();
         FILE *kf = fopen(ini, "r");
         char kt[2000] = "";
         if (kf) {
@@ -978,6 +1003,56 @@ static int menu_shots(const char *dir) {
                     write_bmp24(cn, &cu);
                 }
             }
+        }
+    }
+    if (getenv("TMNT_MENU_TIME")) { /* how long one picture of the menu takes at this size */
+        Ui tu = {0};
+        ui_resize(&tu, w, h);
+        menu_open(0);
+        menu_draw(&tu, NULL);
+        clock_t t0 = clock();
+        for (int rep = 0; rep < 10; rep++) {
+            menu_draw(&tu, NULL);
+        }
+        printf("menu %dx%d: %.1f ms per picture\n", w, h, (double)(clock() - t0) * 1000.0 / CLOCKS_PER_SEC / 10.0);
+        { /* the parts of a picture */
+            UiFont *f = ui_font_load("port/data/fonts/KOMIKAHB.ttf");
+            UiQuad full = ui_quad_rect(0, 0, (float)w, (float)h), panel = ui_quad_rect((float)w * 0.1f, (float)h * 0.1f, (float)w * 0.5f, (float)h * 0.4f);
+            clock_t c0 = clock();
+            for (int rep = 0; rep < 10; rep++) {
+                ui_fill_rect(&tu, 0, 0, w, h, 0x34509E, 255);
+            }
+            printf("  fill_rect opaque, whole picture: %.1f ms%c", (double)(clock() - c0) * 100.0 / CLOCKS_PER_SEC, 10);
+            c0 = clock();
+            for (int rep = 0; rep < 10; rep++) {
+                ui_fill_rect(&tu, 0, 0, w, h, 0x34509E, 128);
+            }
+            printf("  fill_rect half transparent: %.1f ms%c", (double)(clock() - c0) * 100.0 / CLOCKS_PER_SEC, 10);
+            c0 = clock();
+            for (int rep = 0; rep < 10; rep++) {
+                ui_halftone_quad(&tu, &full, 0x34509E, 14.0f, 0.0f, 1.0f, 255);
+            }
+            printf("  halftone, whole picture: %.1f ms\n", (double)(clock() - c0) * 100.0 / CLOCKS_PER_SEC);
+            c0 = clock();
+            for (int rep = 0; rep < 10; rep++) {
+                ui_fill_quad(&tu, &panel, 0xFFF3D6, 255);
+            }
+            printf("  fill of a panel (40%% of the picture): %.1f ms\n", (double)(clock() - c0) * 100.0 / CLOCKS_PER_SEC);
+            c0 = clock();
+            for (int rep = 0; rep < 10; rep++) {
+                ui_stroke_quad(&tu, &panel, 6.0f, 0x101018);
+            }
+            printf("  outline of a panel: %.1f ms\n", (double)(clock() - c0) * 100.0 / CLOCKS_PER_SEC);
+            c0 = clock();
+            for (int rep = 0; rep < 10; rep++) {
+                ui_text(&tu, f, 30.0f, 50, 100, 0x101018, "CEILING SLIDE WATER CURRENT HITBOX FIXES");
+            }
+            printf("  one line of text: %.2f ms\n", (double)(clock() - c0) * 100.0 / CLOCKS_PER_SEC);
+            c0 = clock();
+            for (int rep = 0; rep < 10; rep++) {
+                ui_text_outlined(&tu, f, 30.0f, 50, 100, 0xFFFFFF, 0x101018, 2.0f, "QUIT GAME");
+            }
+            printf("  one outlined title: %.2f ms\n", (double)(clock() - c0) * 100.0 / CLOCKS_PER_SEC);
         }
     }
     static uint32_t picture[256 * 240];
@@ -1242,8 +1317,13 @@ int main(int argc, char **argv) {
     if (getenv("TMNT_BALANCE")) { /* tests only: the balance options on (tools/balance_check.sh) */
         fix_set_balance(1);
     }
-    if (getenv("TMNT_WATER_FIXES")) { /* tests only: the fixes of the water level on */
+    unsigned late_from =
+        getenv("TMNT_FIX_FROM") ? (unsigned)atoi(getenv("TMNT_FIX_FROM")) : 0; /* videos only: the two flags below are switched on at this frame */
+    if (getenv("TMNT_WATER_FIXES") && !late_from) {                            /* tests only: the fixes of the water level on */
         fix_set_water(1);
+    }
+    if (getenv("TMNT_CEILING_FIX") && !late_from) { /* tests and videos only: PIZZA-001 alone */
+        fix_set(FIX_CEILING_SLIDE, 1);
     }
     if (getenv("TMNT_FIXES")) { /* tests only: the fixes of FIXES.md on (they are off otherwise, and then the replays are the original's) */
         fix_set_all(1);
@@ -1255,7 +1335,41 @@ int main(int argc, char **argv) {
     if (getenv("TMNT_HITBOX")) { /* fills the hit box journal (tests: the game must not change, and the formula must match the game's boxes) */
         hitbox_set_enabled(1);
     }
-    for (g->frame = 1; g->frame <= r->frames && !g->left_attract; g->frame++) {
+    unsigned start_frame = 1;
+    if (getenv(
+            "TMNT_LOAD_STATE")) { /* videos only: starts from a state saved by F10 (tmnt_capture_N.state) ; the pad and the pokes go on from the next frame */
+        FILE *sf = fopen(getenv("TMNT_LOAD_STATE"), "rb");
+        Game *saved = calloc(1, sizeof *saved);
+        if (sf && saved && fread(saved, sizeof *saved, 1, sf) == 1) {
+            Rom *rom = g->rom;
+            FILE *tr = g->trace;
+            void (*tap)(struct Game *) = g->sound_tap;
+            *g = *saved;
+            g->rom = rom;
+            g->trace = tr;
+            g->sound_tap = tap;
+            start_frame = g->frame + 1;
+            while (r->next_poke < r->npokes && r->pokes[r->next_poke].frame < start_frame) {
+                r->next_poke++;
+            }
+        } else {
+            fprintf(stderr, "tmnt_replay: cannot read the state %s\n", getenv("TMNT_LOAD_STATE"));
+            return 1;
+        }
+        if (sf) {
+            fclose(sf);
+        }
+        free(saved);
+    }
+    for (g->frame = start_frame; g->frame <= r->frames && !g->left_attract; g->frame++) {
+        if (late_from && g->frame == late_from) {
+            if (getenv("TMNT_WATER_FIXES")) {
+                fix_set_water(1);
+            }
+            if (getenv("TMNT_CEILING_FIX")) {
+                fix_set(FIX_CEILING_SLIDE, 1);
+            }
+        }
         run_frame(r);
     }
     if (hitbox_enabled()) {

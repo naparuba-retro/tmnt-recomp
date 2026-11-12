@@ -23,6 +23,8 @@ typedef struct Ppu {
     uint16_t split_v;
 } Ppu;
 
+#define BLIP_WIDTH 16 /* taps of the band-limited step (see apu.c) */
+
 typedef struct Apu {
     uint8_t enabled, five_step, cycle_odd;
     uint8_t duty[2], len_halt[4], const_vol[4], env_period[4], env_start[4], env_decay[4], env_div[4];
@@ -33,7 +35,13 @@ typedef struct Apu {
     uint8_t tri_ctrl, tri_reload_val, tri_reload, tri_lin, tri_phase, noise_mode;
     uint16_t tri_timer, tri_cnt, noise_per, noise_cnt, lfsr;
     int fs_cycle;
+    /* the DMC channel: delta-modulation samples read from the fixed bank of the ROM */
+    uint8_t dmc_loop, dmc_rate, dmc_level, dmc_buf, dmc_buf_full, dmc_shift, dmc_bits, dmc_silent;
+    uint16_t dmc_addr_start, dmc_addr, dmc_len_start, dmc_len, dmc_cnt;
+    const Rom *dmc_rom;
     double cyc_acc, hp;
+    double blip_tail[BLIP_WIDTH + 2]; /* the band-limited steps already added that reach into the next block of samples */
+    double blip_last, blip_int;       /* the level last seen, and the running sum of the steps (the output) */
 } Apu;
 
 typedef struct Game {

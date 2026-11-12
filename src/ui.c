@@ -96,9 +96,14 @@ UiQuad ui_quad_offset(UiQuad q, float dx, float dy) {
     return q;
 }
 
-/* Signed distance of a point to the quad's edges (positive inside, the smallest of the four lines): the convex shape's coverage and outline come from it. */
-static float quad_dist(const UiQuad *q, float px, float py) {
-    float best = 1e9f;
+/* The four edges of a quad as lines a * x + b * y + c = the distance of the point to the edge (positive inside): computed once per shape, not once per pixel. */
+typedef struct {
+    float a[4], b[4], c[4];
+    int n;
+} Edges;
+
+static void quad_edges(const UiQuad *q, Edges *e) {
+    e->n = 0;
     for (int i = 0; i < 4; i++) {
         int j = (i + 1) & 3;
         float dx = q->x[j] - q->x[i], dy = q->y[j] - q->y[i];
@@ -106,12 +111,27 @@ static float quad_dist(const UiQuad *q, float px, float py) {
         if (len < 1e-4f) {
             continue;
         }
-        float d = (dx * (py - q->y[i]) - dy * (px - q->x[i])) / len;
-        if (d < best) {
-            best = d;
-        }
+        e->a[e->n] = -dy / len;
+        e->b[e->n] = dx / len;
+        e->c[e->n] = (dy * q->x[i] - dx * q->y[i]) / len;
+        e->n++;
+    }
+}
+
+/* Signed distance of a point to the quad's edges (positive inside, the smallest of the four lines): the convex shape's coverage and outline come from it. */
+static inline float edge_dist(const Edges *e, float px, float py) {
+    float best = 1e9f;
+    for (int i = 0; i < e->n; i++) {
+        float d = e->a[i] * px + e->b[i] * py + e->c[i];
+        best = d < best ? d : best;
     }
     return best;
+}
+
+static float quad_dist(const UiQuad *q, float px, float py) {
+    Edges e;
+    quad_edges(q, &e);
+    return edge_dist(&e, px, py);
 }
 
 void ui_desaturate_quad(Ui *ui, const UiQuad *q) {
@@ -124,9 +144,11 @@ void ui_desaturate_quad(Ui *ui, const UiQuad *q) {
     }
     int ix0 = (int)floorf(x0) < 0 ? 0 : (int)floorf(x0), ix1 = (int)ceilf(x1) > ui->w ? ui->w : (int)ceilf(x1);
     int iy0 = (int)floorf(y0) < 0 ? 0 : (int)floorf(y0), iy1 = (int)ceilf(y1) > ui->h ? ui->h : (int)ceilf(y1);
+    Edges ed;
+    quad_edges(q, &ed);
     for (int y = iy0; y < iy1; y++) {
         for (int x = ix0; x < ix1; x++) {
-            if (!ui_quad_contains(q, (float)x + 0.5f, (float)y + 0.5f)) {
+            if (edge_dist(&ed, (float)x + 0.5f, (float)y + 0.5f) < 0.0f) {
                 continue;
             }
             uint32_t c = ui->px[(size_t)y * (size_t)ui->w + (size_t)x];
@@ -157,9 +179,11 @@ static void quad_bounds(const UiQuad *q, float pad, int *x0, int *y0, int *x1, i
 void ui_fill_quad(Ui *ui, const UiQuad *q, uint32_t colour, int alpha) {
     int x0, y0, x1, y1;
     quad_bounds(q, 1.0f, &x0, &y0, &x1, &y1);
+    Edges ed;
+    quad_edges(q, &ed);
     for (int y = y0; y <= y1; y++) {
         for (int x = x0; x <= x1; x++) {
-            float c = clampf(quad_dist(q, (float)x + 0.5f, (float)y + 0.5f) + 0.5f, 0.0f, 1.0f);
+            float c = clampf(edge_dist(&ed, (float)x + 0.5f, (float)y + 0.5f) + 0.5f, 0.0f, 1.0f);
             if (c > 0.0f) {
                 put(ui, x, y, colour, (int)(c * (float)alpha + 0.5f));
             }
@@ -170,9 +194,11 @@ void ui_fill_quad(Ui *ui, const UiQuad *q, uint32_t colour, int alpha) {
 void ui_stroke_quad(Ui *ui, const UiQuad *q, float thickness, uint32_t colour) {
     int x0, y0, x1, y1;
     quad_bounds(q, thickness + 1.0f, &x0, &y0, &x1, &y1);
+    Edges ed;
+    quad_edges(q, &ed);
     for (int y = y0; y <= y1; y++) {
         for (int x = x0; x <= x1; x++) {
-            float d = quad_dist(q, (float)x + 0.5f, (float)y + 0.5f);
+            float d = edge_dist(&ed, (float)x + 0.5f, (float)y + 0.5f);
             float c = clampf(thickness * 0.5f - fabsf(d) + 0.5f, 0.0f, 1.0f);
             if (c > 0.0f) {
                 put(ui, x, y, colour, (int)(c * 255.0f + 0.5f));
@@ -181,29 +207,77 @@ void ui_stroke_quad(Ui *ui, const UiQuad *q, float thickness, uint32_t colour) {
     }
 }
 
+/* The halftone: dots on a square grid turned 45 degrees. With a spacing of p * sqrt(2) pixels (p whole), the dots fall on the pixels (m * p, n * p) with m + n even, so the
+ * pattern repeats every 2p pixels: the coverage of a dot of each size is computed once, in a small tile, and the shape only looks it up. */
+#define HT_LEVELS 32
+#define HT_MAX_P 64
+static uint8_t *ht_tiles; /* HT_LEVELS + 1 tiles of (2p)^2 coverages */
+static int ht_p;
+
+static const uint8_t *halftone_tiles(int p) {
+    if (p == ht_p && ht_tiles) {
+        return ht_tiles;
+    }
+    int period = 2 * p;
+    free(ht_tiles);
+    ht_tiles = (uint8_t *)calloc((size_t)(HT_LEVELS + 1) * (size_t)period * (size_t)period, 1);
+    ht_p = p;
+    if (!ht_tiles) {
+        ht_p = 0;
+        return NULL;
+    }
+    float cell = (float)p * 1.41421356f;
+    for (int level = 1; level <= HT_LEVELS; level++) {
+        float radius = cell * 0.7071f * sqrtf((float)level / (float)HT_LEVELS);
+        for (int y = 0; y < period; y++) {
+            for (int x = 0; x < period; x++) {
+                float best = 1e9f; /* the distance to the nearest dot of the grid */
+                for (int m = -1; m <= 2; m++) {
+                    for (int n = -1; n <= 2; n++) {
+                        if (((m + n) & 1) == 0) {
+                            float dx = (float)x + 0.5f - (float)(m * p), dy = (float)y + 0.5f - (float)(n * p), d = sqrtf(dx * dx + dy * dy);
+                            best = d < best ? d : best;
+                        }
+                    }
+                }
+                ht_tiles[((size_t)level * (size_t)period + (size_t)y) * (size_t)period + (size_t)x] =
+                    (uint8_t)(clampf(radius - best + 0.5f, 0.0f, 1.0f) * 255.0f + 0.5f);
+            }
+        }
+    }
+    return ht_tiles;
+}
+
 void ui_halftone_quad(Ui *ui, const UiQuad *q, uint32_t colour, float cell, float t0, float t1, int alpha) {
     int x0, y0, x1, y1;
     quad_bounds(q, 1.0f, &x0, &y0, &x1, &y1);
+    int p = (int)(cell / 1.41421356f + 0.5f);
+    p = p < 2 ? 2 : p > HT_MAX_P ? HT_MAX_P : p;
+    const uint8_t *tiles = halftone_tiles(p);
+    if (!tiles) {
+        return;
+    }
+    int period = 2 * p;
+    Edges ed;
+    quad_edges(q, &ed);
     float top = (float)y0, span = (float)(y1 - y0 + 1);
-    const float k = 0.70710678f;
     for (int y = y0; y <= y1; y++) {
         float t = (((float)y + 0.5f - top) / span - t0) / (t1 - t0);
         t = clampf(t, 0.0f, 1.0f);
-        float radius = cell * 0.7071f * sqrtf(t);
-        if (radius < 0.4f) {
+        int level = (int)(t * (float)HT_LEVELS + 0.5f);
+        if (level <= 0 || y < 0 || y >= ui->h) {
             continue;
         }
-        for (int x = x0; x <= x1; x++) {
-            float px = (float)x + 0.5f, py = (float)y + 0.5f;
-            float cover = clampf(quad_dist(q, px, py) + 0.5f, 0.0f, 1.0f);
-            if (cover <= 0.0f) {
+        const uint8_t *row = &tiles[((size_t)level * (size_t)period + (size_t)(((y % period) + period) % period)) * (size_t)period];
+        int xm = ((x0 % period) + period) % period;
+        for (int x = x0; x <= x1; x++, xm = xm + 1 == period ? 0 : xm + 1) {
+            int a = row[xm];
+            if (!a || x < 0 || x >= ui->w) {
                 continue;
             }
-            float u = (px + py) * k, v = (px - py) * k; /* the grid is turned 45 degrees */
-            float du = u - floorf(u / cell + 0.5f) * cell, dv = v - floorf(v / cell + 0.5f) * cell;
-            float dot = clampf(radius - sqrtf(du * du + dv * dv) + 0.5f, 0.0f, 1.0f);
-            if (dot > 0.0f) {
-                put(ui, x, y, colour, (int)(dot * cover * (float)alpha + 0.5f));
+            float cover = clampf(edge_dist(&ed, (float)x + 0.5f, (float)y + 0.5f) + 0.5f, 0.0f, 1.0f);
+            if (cover > 0.0f) {
+                put(ui, x, y, colour, (int)((float)a * cover * (float)alpha / 255.0f + 0.5f));
             }
         }
     }

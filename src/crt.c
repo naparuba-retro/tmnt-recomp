@@ -18,7 +18,8 @@
 #define SW 256
 #define SH 240
 #define LIN_MAX 4095
-#define BLOOM 32 /* of 256: how much of the blurred picture is added back (the glow around bright pixels) */
+#define MAX_WORKERS 8 /* threads that share the rows of a picture */
+#define BLOOM 32      /* of 256: how much of the blurred picture is added back (the glow around bright pixels) */
 
 static uint16_t lut_in[256];
 static uint8_t lut_out[LIN_MAX + 1];
@@ -102,7 +103,7 @@ static int worker_count(void) {
 #else
         n = (int)sysconf(_SC_NPROCESSORS_ONLN);
 #endif
-        n = n < 1 ? 1 : n > 4 ? 4 : n;
+        n = n < 1 ? 1 : n > MAX_WORKERS ? MAX_WORKERS : n;
     }
     return n;
 }
@@ -113,13 +114,13 @@ static void run_rows(RowFn fn, int rows) {
         fn(0, rows);
         return;
     }
-    Slice sl[4];
+    Slice sl[MAX_WORKERS];
 #ifdef _WIN32
-    HANDLE th[4];
+    HANDLE th[MAX_WORKERS];
 #else
-    pthread_t th[4];
+    pthread_t th[MAX_WORKERS];
 #endif
-    int started[4] = {0, 0, 0, 0};
+    int started[MAX_WORKERS] = {0};
     for (int i = 0; i < n; i++) {
         sl[i].fn = fn;
         sl[i].first = rows * i / n;

@@ -58,6 +58,7 @@ static int is_open, game_running, page, quit_modal, tick;
 static Kind focus_kind = K_PLAY;
 static int focus_arg;
 static int last_mx = -1, last_my = -1;
+static int drag_opt = -1;    /* the slider that the mouse is dragging */
 static int capture_idx = -1; /* the key box that waits for a key (row * 2 + slot), -1 for none */
 static const MenuKeys *keys_api;
 static char page_names[4][12] = {"PLAY", "SOUND", "GRAPHICS", "CONTROLS"};
@@ -601,7 +602,7 @@ static void draw_edition(const Env *e, int ed, float x, float y, float w, float 
         outline(e, &q, 6.0f, INK);
     }
     if (focus_kind == K_EDITION && focus_arg == ed) { /* the focus, under the title and the tag (drawn next), not over them */
-        float pulse = 1.0f + 0.25f * sinf((float)tick * 0.18f);
+        float pulse = 1.0f;                           /* (not animated: the page is drawn once and kept, see menu_draw) */
         ui_stroke_quad(e->ui, &q, 9.0f * e->s * pulse, WHITE);
         ui_stroke_quad(e->ui, &q, 4.5f * e->s, ORANGE);
     }
@@ -736,7 +737,8 @@ void menu_draw_rom_missing(Ui *ui, const char *rom_dir) {
 }
 
 /* ------------------------------------------------------------------ drawing: a whole frame --- */
-void menu_draw(Ui *ui, const uint32_t *picture) {
+/* The page without the focus outline: the background, the tabs, the page, the question to quit. */
+static void draw_base(Ui *ui, const uint32_t *picture, float *scale) {
     Env e;
     e.ui = ui;
     e.s = fminf((float)ui->w / DESIGN_W, (float)ui->h / DESIGN_H);
@@ -769,6 +771,55 @@ void menu_draw(Ui *ui, const uint32_t *picture) {
         n_items = 0; /* only the two buttons count */
         draw_modal(&e);
     }
+    *scale = e.s;
+}
+
+/* A picture of the page takes tens of milliseconds, so it is drawn only when something it shows changed (the page, an option, the focus, the size...) and kept: the
+ * frames in between copy it and draw the pulse of the focus outline. */
+static uint64_t sig_mix(uint64_t h, uint64_t v) {
+    return (h ^ v) * 1099511628211ull;
+}
+
+static uint64_t page_signature(const Ui *ui, const uint32_t *picture) {
+    uint64_t h = 14695981039346656037ull;
+    h = sig_mix(h, (uint64_t)ui->w);
+    h = sig_mix(h, (uint64_t)ui->h);
+    h = sig_mix(h, (uint64_t)page);
+    h = sig_mix(h, (uint64_t)quit_modal);
+    h = sig_mix(h, (uint64_t)(capture_idx + 1));
+    h = sig_mix(h, (uint64_t)game_running);
+    h = sig_mix(h, (uint64_t)focus_kind);
+    h = sig_mix(h, (uint64_t)(focus_arg + 1));
+    h = sig_mix(h, (uint64_t)(drag_opt + 1));
+    h = sig_mix(h, picture ? (uint64_t)picture[0] ^ ((uint64_t)picture[256 * 120 + 128] << 24) ^ 1u : 0u);
+    for (int i = 0; i < OPT_COUNT; i++) {
+        h = sig_mix(h, (uint64_t)(opt_get((OptId)i) + 100000));
+    }
+    h = sig_mix(h, (uint64_t)(uintptr_t)font_title);
+    return h;
+}
+
+void menu_draw(Ui *ui, const uint32_t *picture) {
+    static Ui base;
+    static Item base_items[MAX_ITEMS];
+    static int base_n, base_valid;
+    static uint64_t base_sig;
+    static float base_scale;
+    uint64_t sig = page_signature(ui, picture);
+    if (!base_valid || sig != base_sig || base.w != ui->w || base.h != ui->h) {
+        ui_resize(&base, ui->w, ui->h);
+        draw_base(&base, picture, &base_scale);
+        memcpy(base_items, items, sizeof items);
+        base_n = n_items;
+        base_sig = sig;
+        base_valid = 1;
+    }
+    memcpy(ui->px, base.px, (size_t)ui->w * (size_t)ui->h * sizeof *ui->px);
+    memcpy(items, base_items, sizeof items);
+    n_items = base_n;
+    Env e;
+    e.ui = ui;
+    e.s = base_scale;
     /* the focus: a thick white outline that pulses, with a yellow one inside */
     for (int i = n_items - 1; i >= 0; i--) {
         if (items[i].kind == focus_kind && items[i].arg == focus_arg && items[i].enabled && items[i].kind != K_EDITION) { /* (an edition draws its own) */
@@ -871,13 +922,20 @@ static void move_focus(int dx, int dy) {
     }
 }
 
+/* tmnt.ini is written a little after the last change (a slider moves many times), when the menu is left, and when the program ends: not at every click. */
+static int save_pending, save_idle;
+
 static void save_options(void) {
-    if (ini_file[0]) {
-        options_save(ini_file);
-    }
+    save_pending = 1;
+    save_idle = 0;
 }
 
-static int drag_opt = -1; /* the slider that the mouse is dragging */
+void menu_flush(void) {
+    if (save_pending && ini_file[0]) {
+        options_save(ini_file);
+    }
+    save_pending = 0;
+}
 
 /* The value of a slider for a mouse position (the track is the right part of the row, see option_row). */
 static void slider_from_x(int arg, int mouse_x) {
@@ -957,7 +1015,17 @@ static MenuAction activate(Kind k, int arg, int mouse_x) {
     return MENU_NONE;
 }
 
+static MenuAction menu_update_inner(const MenuInput *in);
+
 MenuAction menu_update(const MenuInput *in) {
+    MenuAction a = menu_update_inner(in);
+    if (save_pending && (a != MENU_NONE || !is_open || ++save_idle >= 30)) {
+        menu_flush();
+    }
+    return a;
+}
+
+static MenuAction menu_update_inner(const MenuInput *in) {
     tick++;
     if (find_focus() < 0 && n_last > 0) { /* the focused item is not on this page: the page's own tab */
         focus_kind = K_TAB;

@@ -2,6 +2,7 @@
  * through platform.h (Windows or SDL2). The pace comes from the sound card: 735 samples at 44100 Hz per frame.
  * Keys: arrows = d-pad, Z or W = B, X = A, Enter = Start, Tab or right Shift = Select, M = sound, P = pause, I = invincible,
  * H = hit boxes, J = the fixes of FIXES.md, E = the water fixes, C = the camera fix, S = the spawn mask, R = the balance, F = no sprite flicker, L = large view, F5 = restart, F9 = rewind, F10 = capture, Esc = quit. */
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -147,6 +148,7 @@ static void capture(Game *g) {
 static FILE *input_log;
 static FILE *poke_log; /* tmnt_pokes.txt: "frame address value", format of build/pk_*.txt (replay in the port) */
 static int start_level2, level2_done, no_menu;
+static int random_seed;       /* --random-seed: randomises RandomSeed when --levelN jumps to the level */
 static int start_level_n = 1; /* --level2: 1; --level3: 2; --level4: 3 (value of LevelNumber and AreaNumber of the street) */
 static uint8_t input_mask;
 
@@ -367,6 +369,9 @@ static void parse_options(int argc, char **argv) {
         if (!strcmp(argv[i], "--no-menu")) {
             no_menu = 1; /* straight into the game, as before the menu existed */
         }
+        if (!strcmp(argv[i], "--random-seed")) {
+            random_seed = 1;
+        }
         if (!strcmp(argv[i], "--invincible")) {
             opt_set(OPT_INVINCIBLE, 1);
         }
@@ -434,6 +439,14 @@ static void apply_start_level(Game *g) {
         g->ram[pk[i].a] = pk[i].v;
         if (poke_log) {
             fprintf(poke_log, "%u %u %u\n", g->frame, pk[i].a, pk[i].v);
+            fflush(poke_log);
+        }
+    }
+    if (random_seed) { /* --random-seed: a different layout of enemies at each launch (logged like the other pokes, so the replay stays exact) */
+        uint8_t s = (uint8_t)(time(NULL) ^ clock());
+        g->ram[RandomSeed] = s;
+        if (poke_log) {
+            fprintf(poke_log, "%u %u %u\n", g->frame, RandomSeed, s);
             fflush(poke_log);
         }
     }
@@ -507,7 +520,7 @@ static double now_ms(void) {
     return (double)t.tv_sec * 1000.0 + (double)t.tv_nsec / 1e6;
 }
 
-static void frame_log(unsigned frame, double poll, double wait, double run, int pad) {
+static FILE *frame_log_file(void) {
     static FILE *f;
     static int tried;
     if (!tried) {
@@ -516,6 +529,11 @@ static void frame_log(unsigned frame, double poll, double wait, double run, int 
             f = fopen(getenv("TMNT_FRAMELOG"), "w");
         }
     }
+    return f;
+}
+
+static void frame_log(unsigned frame, double poll, double wait, double run, int pad) {
+    FILE *f = frame_log_file();
     static int last_pad = -1;
     if (f && pad != last_pad) { /* the pad that the game sees, with the clock, to compare with the moment of a key press */
         fprintf(f, "t=%.0f frame %u pad %02X\n", now_ms(), frame, pad);
@@ -524,6 +542,32 @@ static void frame_log(unsigned frame, double poll, double wait, double run, int 
     if (f && (poll > 8.0 || wait > 40.0 || run > 12.0)) {
         fprintf(f, "frame %u: poll %.1f ms, wait %.1f ms, logic+draw %.1f ms\n", frame, poll, wait, run);
         fflush(f);
+    }
+}
+
+/* TMNT_FRAMELOG: every 5 seconds, where a frame's time goes (logic of the game, drawing of the picture, showing it in the window). */
+static void frame_parts(double logic, double render_ms, double present) {
+    static int frames;
+    static double sum_l, sum_r, sum_p, max_l, max_r, max_p;
+    if (!getenv("TMNT_FRAMELOG")) {
+        return;
+    }
+    frames++;
+    sum_l += logic;
+    sum_r += render_ms;
+    sum_p += present;
+    max_l = logic > max_l ? logic : max_l;
+    max_r = render_ms > max_r ? render_ms : max_r;
+    max_p = present > max_p ? present : max_p;
+    if (frames >= 300) {
+        FILE *f = frame_log_file();
+        if (f) {
+            fprintf(f, "300 frames: logic %.1f ms (max %.1f), drawing %.1f ms (max %.1f), showing %.1f ms (max %.1f)%c", sum_l / 300, max_l, sum_r / 300, max_r,
+                    sum_p / 300, max_p, 10);
+            fflush(f);
+        }
+        frames = 0;
+        sum_l = sum_r = sum_p = max_l = max_r = max_p = 0;
     }
 }
 
@@ -559,26 +603,44 @@ static const MenuKeys menu_keys = {keys_name, keys_default};
 /* The picture of the game, plain or with the CRT look (drawn by the processor at the size of the window, with the proportions kept). */
 static void present_game(void) {
     static uint32_t *crt_buf;
-    static int crt_w, crt_h;
+    static int crt_w, crt_h, crt_div = 1, calm;
+    static double crt_avg;
     if (!opt_get(OPT_CRT)) {
         platform_present(screen);
         return;
     }
     int w, h;
     platform_window_size(&w, &h);
-    if (w != crt_w || h != crt_h || !crt_buf) {
+    /* on a huge window the filter may not fit in a frame (1/60 s): it is then drawn at half the size, which the window stretches, until it fits again */
+    int rw = w / crt_div, rh = h / crt_div;
+    if (rw != crt_w || rh != crt_h || !crt_buf) {
         free(crt_buf);
-        crt_buf = (uint32_t *)malloc((size_t)w * (size_t)h * sizeof *crt_buf);
-        crt_w = w;
-        crt_h = h;
+        crt_buf = (uint32_t *)malloc((size_t)rw * (size_t)rh * sizeof *crt_buf);
+        crt_w = rw;
+        crt_h = rh;
     }
     if (!crt_buf) {
         platform_present(screen);
         return;
     }
+    double t0 = now_ms();
     CrtParams p = {opt_get(OPT_CRT_SCAN), opt_get(OPT_CRT_MASK), opt_get(OPT_CRT_CURVE), opt_get(OPT_INTEGER_SCALE)};
-    crt_render(crt_buf, w, h, screen, &p);
-    platform_present_hd(crt_buf, w, h);
+    crt_render(crt_buf, rw, rh, screen, &p);
+    platform_present_hd(crt_buf, rw, rh);
+    double dt = now_ms() - t0;
+    crt_avg = crt_avg < 0.5 ? dt : crt_avg * 0.9 + dt * 0.1;
+    if (crt_div == 1 && crt_avg > 13.0 && w % 2 == 0 && h % 2 == 0) {
+        crt_div = 2;
+        crt_avg = 0;
+        calm = 0;
+    } else if (crt_div == 2) {
+        calm = crt_avg * 4.0 < 9.0 ? calm + 1 : 0; /* what the full size would cost, about four times as much */
+        if (calm > 180) {
+            crt_div = 1;
+            crt_avg = 0;
+            calm = 0;
+        }
+    }
 }
 
 /* The display options (menu or F11) reach the window, and the keys of the pad (menu) the keyboard. */
@@ -606,7 +668,9 @@ static void run_game_frame(Game *g, int audio) {
     if (g->ram[GameMode] == 4 && g->frame % SNAP_EVERY == SNAP_EVERY - 1) {
         snap_save(g); /* end of the 1st frame of the series: stable state between two frames */
     }
+    double t_a = now_ms();
     logic_frame(g, 1);
+    double t_b = now_ms();
     if (g->left_attract && g->ram[GameMode] == 4) { /* level loaded, but the rest is not ported: the frame is kept */
         frozen = 1;
         apu_write(g, 0x15, 0);
@@ -616,11 +680,14 @@ static void run_game_frame(Game *g, int audio) {
         reset_game(g);
         g->frame = 0;
     }
+    double t_c = now_ms();
     render(g);
+    double t_d = now_ms();
     if (opt_get(OPT_SHOW_FPS)) {
         count_fps();
     }
     present_game();
+    frame_parts(t_b - t_a, t_d - t_c, now_ms() - t_d);
     if ((int)g->frame / 60 != last_title_frame && g->frame % 60 == 0) {
         char t[240];
         last_title_frame = (int)g->frame / 60;
@@ -714,10 +781,19 @@ static void start_new_game(Game *g) {
 }
 
 /* One frame of the menu: the pad and the mouse go to it, it is drawn over the frozen game and shown at the size of the window. */
+#define MENU_MAX_PIXELS 1500000.0
+
 static void menu_frame(Game *g, const PlatformEvents *ev) {
     int w, h;
     platform_window_size(&w, &h);
-    ui_resize(&menu_ui, w, h);
+    /* the menu is drawn by the processor: on a big window it is drawn at a smaller size (about 1.5 million pixels at most) and the window stretches it */
+    int uw = w, uh = h;
+    if ((double)w * (double)h > MENU_MAX_PIXELS) {
+        double k = sqrt(MENU_MAX_PIXELS / ((double)w * (double)h));
+        uw = (int)((double)w * k);
+        uh = (int)((double)h * k);
+    }
+    ui_resize(&menu_ui, uw, uh);
     uint8_t pad = platform_pad(), edge = (uint8_t)(pad & ~menu_prev_pad);
     menu_prev_pad = pad;
     MenuInput in = {0};
@@ -732,10 +808,14 @@ static void menu_frame(Game *g, const PlatformEvents *ev) {
     in.tab_prev = ev->tab_prev;
     in.tab_next = ev->tab_next;
     platform_mouse(&in.mouse_x, &in.mouse_y, &in.clicked, &in.mouse_down);
+    if (in.mouse_x >= 0 && (uw != w || uh != h)) { /* the cursor in the pixels of the menu's picture */
+        in.mouse_x = (int)((long long)in.mouse_x * uw / w);
+        in.mouse_y = (int)((long long)in.mouse_y * uh / h);
+    }
     in.key = platform_capture_key();
     MenuAction a = menu_update(&in);
     menu_draw(&menu_ui, game_started ? screen : NULL);
-    platform_present_hd(menu_ui.px, w, h);
+    platform_present_hd(menu_ui.px, uw, uh);
     if (a == MENU_NEW_GAME || a == MENU_RESUME) {
         pad_swallow = platform_pad();
     }
@@ -920,6 +1000,7 @@ int main(int argc, char **argv) {
             platform_audio_submit(pcm);
         }
     }
+    menu_flush(); /* the last change of the menu, if the program ends before it was written */
     platform_shutdown();
     return 0;
 }

@@ -127,6 +127,55 @@ static int16_t buf[NBUF][SAMPLES_PER_FRAME];
 static int audio, slot;
 static LARGE_INTEGER freq, t0;
 
+/* TMNT_AUDIOLOG=<file>: why the sound crackles. Every 5 seconds a line says how many frames went by, the longest time that the game took between the end of the wait for the
+ * sound card and the next sound buffer (a frame is 16.7 ms: above it, the card empties its queue), the lowest number of buffers still waiting in the card, and how many
+ * times the card had nothing left to play (an underrun = a crackle). */
+static FILE *alog;
+static int alog_tried;
+static double wait_end_ms;
+
+static double clock_ms(void) {
+    LARGE_INTEGER t;
+    QueryPerformanceCounter(&t);
+    return (double)t.QuadPart * 1000.0 / (double)freq.QuadPart;
+}
+
+static void audio_log_frame(int queued) {
+    static int frames, underruns, over, min_queue = 99;
+    static double max_work, sum_work, last_ms;
+    if (!alog_tried) {
+        alog_tried = 1;
+        const char *path = getenv("TMNT_AUDIOLOG");
+        alog = path ? fopen(path, "w") : NULL;
+        last_ms = clock_ms();
+        if (alog) {
+            fprintf(alog, "buffers of the card: %d (%d ms of sound)\n", NBUF, NBUF * 1000 * SAMPLES_PER_FRAME / SAMPLE_RATE);
+        }
+    }
+    if (!alog) {
+        return;
+    }
+    double work = clock_ms() - wait_end_ms;
+    frames++;
+    sum_work += work;
+    max_work = work > max_work ? work : max_work;
+    over += work > 16.7;
+    underruns += queued == 0;
+    min_queue = queued < min_queue ? queued : min_queue;
+    if (queued == 0) {
+        fprintf(alog, "t=%.0f ms: UNDERRUN (the card had nothing left), the frame took %.1f ms\n", clock_ms(), work);
+    }
+    if (clock_ms() - last_ms >= 5000.0) {
+        fprintf(alog, "%d frames: work per frame average %.1f ms, longest %.1f ms, %d frames above 16.7 ms, fewest buffers waiting %d, underruns %d\n", frames,
+                sum_work / frames, max_work, over, min_queue, underruns);
+        fflush(alog);
+        frames = underruns = over = 0;
+        min_queue = 99;
+        max_work = sum_work = 0;
+        last_ms = clock_ms();
+    }
+}
+
 static LRESULT CALLBACK wndproc(HWND h, UINT m, WPARAM w, LPARAM l) {
     switch (m) {
         case WM_DESTROY:
@@ -198,6 +247,13 @@ static LRESULT CALLBACK wndproc(HWND h, UINT m, WPARAM w, LPARAM l) {
             RECT r;
             GetClientRect(h, &r);
             if (hd_w) {
+                if ((hd_w != r.right || hd_h != r.bottom) &&
+                    (r.right % hd_w ||
+                     r.bottom %
+                         hd_h)) { /* a picture drawn smaller than the window by a ratio that is not whole (the menu on a big window): smooth stretch, not blocks */
+                    SetStretchBltMode(dc, HALFTONE);
+                    SetBrushOrgEx(dc, 0, 0, NULL);
+                }
                 StretchDIBits(dc, 0, 0, r.right, r.bottom, 0, 0, hd_w, hd_h, hd_pixels, &bmi_hd, DIB_RGB_COLORS, SRCCOPY);
             } else { /* the proportions are always kept: the picture is centred with black bars, at a whole multiple of its size if asked */
                 int pw, ph;
@@ -509,6 +565,7 @@ void platform_wait_frame(void) {
                 break;
             }
         }
+        wait_end_ms = clock_ms();
     } else { /* no sound card: 60 frames per second */
         LARGE_INTEGER t;
         do {
@@ -520,6 +577,11 @@ void platform_wait_frame(void) {
 }
 
 void platform_audio_submit(const int16_t *pcm) {
+    int queued = 0; /* the buffers that the card still has to play */
+    for (int i = 0; i < NBUF; i++) {
+        queued += i != slot && (hdr[i].dwFlags & WHDR_INQUEUE) != 0 && !(hdr[i].dwFlags & WHDR_DONE);
+    }
+    audio_log_frame(queued);
     memcpy(buf[slot], pcm, sizeof buf[slot]);
     waveOutWrite(wo, &hdr[slot], sizeof hdr[slot]);
     slot = (slot + 1) % NBUF;

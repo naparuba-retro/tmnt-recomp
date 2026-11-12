@@ -43,6 +43,7 @@ void menu_open(int game_running); /* game_running: a game is under the menu, RES
 void menu_close(void);
 int menu_is_open(void);
 MenuAction menu_update(const MenuInput *in);
+void menu_flush(void); /* writes tmnt.ini now if something changed (it is otherwise written a little after the last change) */
 /* Draws the page on `ui` (the whole window); `picture` is the game's last 256x240 picture shown darkened behind (NULL at the launch). */
 void menu_draw(Ui *ui, const uint32_t *picture);
 /* The page of the "ROM needed" window: where to put the ROM (`rom_dir`). Needs menu_init for the fonts. */
