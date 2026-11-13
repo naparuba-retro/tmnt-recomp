@@ -34,6 +34,7 @@
 #include "enemy.h"
 #include "spawn_mask.h"
 #include "crt.h"
+#include "lighting.h"
 #include "menu.h"
 #include "options.h"
 #include "ui.h"
@@ -979,6 +980,124 @@ static int menu_shots(const char *dir) {
         options_apply_edition(atoi(getenv("TMNT_MENU_EDITION")));
         if (getenv("TMNT_MENU_MODIFIED")) {
             opt_set_user(OPT_NO_FLICKER, 0);
+        }
+    }
+    if (getenv(
+            "TMNT_LIGHT_RAW")) { /* the lighting of lighting.c on a picture given as raw 0x00RRGGBB words (256 x 240): light_A.bmp ... light_D.bmp, 3 times the size */
+        static uint32_t base[256 * 240];
+        FILE *lf = fopen(getenv("TMNT_LIGHT_RAW"), "rb");
+        if (lf) {
+            size_t got = fread(base, sizeof base[0], 256 * 240, lf);
+            fclose(lf);
+            if (got == 256 * 240) {
+                float tx = 128.0f, ty = 96.0f, sx = 0.0f, sy = 0.0f;
+                int cnt = 0;
+                for (int y = 0; y < 192; y++) { /* the turtle: the pixels of its green */
+                    for (int x = 0; x < 256; x++) {
+                        uint32_t c = base[y * 256 + x];
+                        if (((c >> 8) & 255) > 170 && ((c >> 16) & 255) < 140 && (c & 255) < 120) {
+                            sx += (float)x;
+                            sy += (float)y;
+                            cnt++;
+                        }
+                    }
+                }
+                if (cnt > 20) {
+                    tx = sx / (float)cnt;
+                    ty = sy / (float)cnt;
+                }
+                /* A: the ambient chosen; B: with the violet glows; C: glows, noise and a grade; D: C with more bloom and stronger glows */
+                static const LightParams presets[4] = {
+                    {{0.16f, 0.22f, 0.32f},
+                     0.9f,
+                     0.6f,
+                     {0.02f, 0.05f, 0.09f},
+                     0.30f,
+                     {1.0f, 1.0f, 1.0f},
+                     1.0f,
+                     0.0f,
+                     0.0f,
+                     1.0f,
+                     1.0f,
+                     0.0f,
+                     0,
+                     0.0f,
+                     0.45f,
+                     0.04f,
+                     192},
+                    {{0.16f, 0.22f, 0.32f},
+                     0.9f,
+                     0.6f,
+                     {0.02f, 0.05f, 0.09f},
+                     0.30f,
+                     {1.0f, 1.0f, 1.0f},
+                     1.0f,
+                     0.0f,
+                     0.3f,
+                     1.0f,
+                     1.0f,
+                     0.0f,
+                     0,
+                     0.0f,
+                     0.45f,
+                     0.04f,
+                     192},
+                    {{0.16f, 0.22f, 0.32f},
+                     0.9f,
+                     0.6f,
+                     {0.02f, 0.05f, 0.09f},
+                     0.30f,
+                     {1.0f, 0.95f, 0.85f},
+                     1.15f,
+                     0.04f,
+                     0.3f,
+                     1.0f,
+                     1.0f,
+                     0.0f,
+                     0,
+                     0.0f,
+                     0.45f,
+                     0.04f,
+                     192},
+                    {{0.16f, 0.22f, 0.32f},
+                     0.9f,
+                     0.35f,
+                     {0.02f, 0.05f, 0.09f},
+                     0.30f,
+                     {1.0f, 0.95f, 0.85f},
+                     1.15f,
+                     0.04f,
+                     0.5f,
+                     1.0f,
+                     1.0f,
+                     0.0f,
+                     0,
+                     0.0f,
+                     0.45f,
+                     0.04f,
+                     192},
+                };
+                static const float light_rgb[4][5] = {
+                    {78, 1.15f, 1.0f, 0.93f, 0.78f}, {78, 1.15f, 1.0f, 0.93f, 0.78f}, {78, 1.15f, 1.0f, 0.93f, 0.78f}, {78, 1.15f, 1.0f, 0.93f, 0.78f}};
+                for (int v = 0; v < 4; v++) {
+                    static uint32_t pic[256 * 240];
+                    memcpy(pic, base, sizeof pic);
+                    LightSource ls = {tx, ty, light_rgb[v][0], light_rgb[v][1], light_rgb[v][2], light_rgb[v][3], light_rgb[v][4]};
+                    clock_t t0 = clock();
+                    lighting_apply(pic, 256, 240, &ls, 1, &presets[v], 30, NULL);
+                    printf("light %c: %.2f ms (turtle at %.0f,%.0f)%c", 'A' + v, (double)(clock() - t0) * 1000.0 / CLOCKS_PER_SEC, tx, ty, 10);
+                    Ui lu = {0};
+                    ui_resize(&lu, 768, 720);
+                    for (int y = 0; y < 720; y++) {
+                        for (int x = 0; x < 768; x++) {
+                            lu.px[y * 768 + x] = pic[(y / 3) * 256 + x / 3];
+                        }
+                    }
+                    char ln[600];
+                    snprintf(ln, sizeof ln, "%s/light_%c.bmp", dir, 'A' + v);
+                    write_bmp24(ln, &lu);
+                }
+            }
         }
     }
     if (getenv("TMNT_CRT_RAW")) { /* the CRT look on a picture given as raw 0x00RRGGBB words (256 x 240), to look at it: crt_flat.bmp and crt_curved.bmp */

@@ -12,6 +12,7 @@
 #include "help_screen.h"
 #include "hitbox_view.h"
 #include "large_view.h"
+#include "lighting_game.h"
 #include "menu.h"
 #include "nmi.h"
 #include "options.h"
@@ -239,6 +240,8 @@ static void reset_game(Game *g) {
 static void logic_frame(Game *g, int keyboard);
 
 /* windowless test mode: tmnt --dump N output  -> output.bmp (last frame) and output.wav (N frames) */
+static double now_ms(void);
+
 static int dump_mode(Game *g, int frames, const char *base) {
     char name[512];
     static int16_t pcm[SAMPLES_PER_FRAME];
@@ -264,6 +267,16 @@ static int dump_mode(Game *g, int frames, const char *base) {
     int shot_from =
         getenv("TMNT_DUMP_FROM") ? atoi(getenv("TMNT_DUMP_FROM")) : 0; /* TMNT_DUMP_FROM / TMNT_DUMP_TO: a picture of every frame of that range (name_N.bmp) */
     int shot_to = getenv("TMNT_DUMP_TO") ? atoi(getenv("TMNT_DUMP_TO")) : 0;
+    int shot_list[512], shot_list_n = 0;
+    if (getenv("TMNT_DUMP_LIST")) {
+        FILE *lf = fopen(getenv("TMNT_DUMP_LIST"), "r");
+        while (lf && shot_list_n < 512 && fscanf(lf, "%d", &shot_list[shot_list_n]) == 1) {
+            shot_list_n++;
+        }
+        if (lf) {
+            fclose(lf);
+        }
+    }
     FILE *hash_log = getenv("TMNT_DUMP_HASH") ? fopen(getenv("TMNT_DUMP_HASH"), "w") : NULL;
     for (int f = 1; f <= frames; f++) {
         logic_frame(g, 0);
@@ -276,8 +289,17 @@ static int dump_mode(Game *g, int frames, const char *base) {
             }
             fprintf(hash_log, "%d %llx %llx%c", f, ht, hr, 10);
         }
+        for (int li = 0; li < shot_list_n; li++) { /* TMNT_DUMP_LIST=<file>: one frame number per line, a picture of each (name_N.bmp) */
+            if (shot_list[li] == f) {
+                render(g);
+                lighting_game_apply(g, screen, 1);
+                snprintf(name, sizeof name, "%s_%d.bmp", base, f);
+                write_bmp(name);
+            }
+        }
         if (shot_from && f >= shot_from && f <= shot_to) {
             render(g);
+            lighting_game_apply(g, screen, 1);
             snprintf(name, sizeof name, "%s_%d.bmp", base, f);
             write_bmp(name);
         }
@@ -290,7 +312,23 @@ static int dump_mode(Game *g, int frames, const char *base) {
     if (hash_log) {
         fclose(hash_log);
     }
+    if (getenv("TMNT_DUMP_RAM")) {
+        fprintf(stderr, "mode %d level %d area %d side %d option %d\n", g->ram[GameMode], g->ram[LevelNumber], g->ram[AreaNumber], g->ram[SideViewFlag],
+                opt_get(OPT_ILLUMINATION));
+    }
     render(g);
+    if (getenv("TMNT_LIGHT_TIME") && opt_get(OPT_ILLUMINATION)) { /* the cost of the lighting on this frame, averaged over 50 runs */
+        static uint32_t keep[SCREEN_W * SCREEN_H];
+        memcpy(keep, screen, sizeof keep);
+        double t0 = now_ms();
+        for (int rep = 0; rep < 50; rep++) {
+            memcpy(screen, keep, sizeof keep);
+            lighting_game_apply(g, screen, 1);
+        }
+        fprintf(stderr, "lighting: %.2f ms per picture%c", (now_ms() - t0) / 50.0, 10);
+        memcpy(screen, keep, sizeof keep);
+    }
+    lighting_game_apply(g, screen, 1);
     snprintf(name, sizeof name, "%s.bmp", base);
     write_bmp(name);
     return 0;
@@ -569,9 +607,12 @@ static void frame_log(unsigned frame, double poll, double wait, double run, int 
 /* TMNT_FRAMELOG: every 5 seconds, where a frame's time goes (logic of the game, drawing of the picture, showing it in the window). */
 static void frame_parts(double logic, double render_ms, double present) {
     static int frames;
-    static double sum_l, sum_r, sum_p, max_l, max_r, max_p;
+    static double sum_l, sum_r, sum_p, max_l, max_r, max_p, batch_start;
     if (!getenv("TMNT_FRAMELOG")) {
         return;
+    }
+    if (!frames) {
+        batch_start = now_ms();
     }
     frames++;
     sum_l += logic;
@@ -704,6 +745,7 @@ static void run_game_frame(Game *g, int audio) {
     }
     double t_c = now_ms();
     render(g);
+    lighting_game_apply(g, screen, 0);
     double t_d = now_ms();
     if (opt_get(OPT_SHOW_FPS)) {
         count_fps();
@@ -992,7 +1034,9 @@ int main(int argc, char **argv) {
             frozen = 0;
         }
         double t_wait0 = now_ms();
-        platform_wait_frame();
+        if (!getenv("TMNT_UNCAPPED")) { /* TMNT_UNCAPPED=1: no pacing by the sound card, no sound (a test of the raw speed) */
+            platform_wait_frame();
+        }
         double t_wait = now_ms() - t_wait0;
         if (ev.rewind && g->ram[GameMode] == 4 && snap_restore(g)) {
             paused = 0;
@@ -1006,7 +1050,7 @@ int main(int argc, char **argv) {
             run_game_frame(g, audio);
         }
         frame_log(g->frame, t_poll, t_wait, now_ms() - t_run0, g->pad);
-        if (audio) {
+        if (audio && !getenv("TMNT_UNCAPPED")) {
             if (paused) {
                 memset(pcm, 0, sizeof pcm);
             } else {

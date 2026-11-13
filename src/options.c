@@ -42,6 +42,8 @@ static const OptInfo info[OPT_COUNT] = {
     [OPT_CRT_SCAN] = {"crt_scanlines", "graphics", "CRT scanlines", "How dark the gap between two lines of the picture is.", 25, 0, 100, 1, 1},
     [OPT_CRT_MASK] = {"crt_mask", "graphics", "CRT mask", "The red, green and blue dots of the screen. It needs a window larger than twice the game's picture.",
                       70, 0, 100, 1, 1},
+    [OPT_ILLUMINATION] = {"illumination", "graphics", "Illumination", "The sewers lit with shadows, glows, waves of light and drops of water (display only).",
+                          0, 0, 1, 1, 1},
     [OPT_CRT_CURVE] = {"crt_curve", "graphics", "CRT curve", "The curved glass of a tube. 0 is flat (and faster).", 5, 0, 100, 1, 1},
 #define KEYOPT(row, name, label)                                                                                                                               \
     [OPT_KEY_FIRST + (row) * 2] = {"key_" name "_1", "keys", label " key 1", "The first key of this pad button (0: default, -1: none).", 0, -1, 4096, 1, 1},   \
