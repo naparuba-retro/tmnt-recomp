@@ -216,7 +216,8 @@ void lighting_game_apply(Game *g, uint32_t *screen, int instant) {
         lights[count].b = 0.78f;
         count++;
     }
-    for (int x = 5; x < 16 && count < 12; x++) { /* the enemies and their shots: a small cold light, so that they are not lost in the dark */
+    for (int x = 5; x < 16 && count < 12 && kind != KIND_STREET; x++) {
+        /* (in the street their light is so faint that it is not worth its cost) */ /* the enemies and their shots: a small cold light, so that they are not lost in the dark */
         if (g->ram[EntType + x] != 0 && (g->ram[EntFlags + x] & 2)) {
             lights[count].x = (float)g->ram[EntX + x];
             lights[count].y = (float)g->ram[EntY + x] - 8.0f;

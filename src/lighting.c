@@ -80,7 +80,7 @@ static float noise2(float x, float y) {
 /* Does a ray from (lx, ly) to (tx, ty) cross a solid square before it gets to the square of the target? (the square of the light and the square of the target do not count) */
 static int blocked(const uint8_t *solid8, int cw, int ch, float lx, float ly, float tx, float ty) {
     float dx = tx - lx, dy = ty - ly, len = sqrtf(dx * dx + dy * dy);
-    int steps = (int)(len * (1.0f / 3.0f));
+    int steps = (int)(len * (1.0f / 6.0f)); /* a step is less than a square (8 pixels): no wall is jumped over */
     int c0x = (int)(lx * 0.125f), c0y = (int)(ly * 0.125f), c1x = (int)(tx * 0.125f), c1y = (int)(ty * 0.125f);
     float inv = steps > 0 ? 1.0f / (float)steps : 0.0f;
     for (int i = 1; i < steps; i++) {
@@ -110,9 +110,75 @@ static struct {
     uint32_t *pic;
     const LightParams *p;
     int w, rows, hw, hh, qw, qh, graded;
-    float time, bloom_gain, hole_x, hole_y, hole_r;
+    float time, bloom_gain, hole_x, hole_y, hole_r, wave;
+    const LightSource *lights;
+    int count;
+    const uint8_t *solid8;
     float lut[3][1024];
 } job;
+
+/* Pass 0: the light map (a value per 4x4 pixels): the lights, with their shadows, the waves, the glows. A line of the map at a time. */
+static void phase_lightmap(int first, int last) {
+    const LightParams *p = job.p;
+    const LightSource *lights = job.lights;
+    const uint8_t *solid8 = job.solid8;
+    int count = job.count, w = job.w, rows = job.rows, hw = job.hw, qw = job.qw;
+    float time = job.time, wave = job.wave;
+    for (int y = first; y < last; y++) {
+        for (int x = 0; x < qw; x++) {
+            float fx = (float)(4 * x + 2), fy = (float)(4 * y + 2), lr = 0.0f, lg = 0.0f, lb = 0.0f, gr = 0.0f, gg = 0.0f, gb = 0.0f;
+            int cell_solid = solid8 && solid8[((4 * y + 2) >> 3) * (w / 8) + ((4 * x + 2) >> 3)];
+            for (int k = 0; k < count; k++) {
+                float dx = fx - lights[k].x, dy = (fy - lights[k].y) * 1.1f;
+                float d = sqrtf(dx * dx + dy * dy) / (lights[k].radius * wave * (cell_solid ? 1.0f : p->far_light));
+                if (d < 1.0f && !(solid8 && blocked(solid8, w / 8, rows / 8, lights[k].x, lights[k].y, fx, fy))) {
+                    float e = 1.0f - d, f = e * sqrtf(e) * lights[k].intensity * (cell_solid ? p->solid_light : 1.0f); /* e to the power 1.5 */
+                    lr += f * lights[k].r;
+                    lg += f * lights[k].g;
+                    lb += f * lights[k].b;
+                    gr += e * e * (3.0f - 2.0f * e) * lights[k].glow * lights[k].r;
+                    gg += e * e * (3.0f - 2.0f * e) * lights[k].glow * lights[k].g;
+                    gb += e * e * (3.0f - 2.0f * e) * lights[k].glow * lights[k].b;
+                }
+            }
+            if (p->waves > 0.0f && !cell_solid &&
+                (!p->waves_water ||
+                 wat[(2 * y) * hw + 2 * x] >
+                     0.3f)) { /* bands of light that drift, like the light on the ceiling of a room above water: the product of two slow waves */
+                float wtime = time * (p->wave_speed > 0.0f ? p->wave_speed : 1.0f);
+                float wv = sinf(fx * 0.045f + wtime * 0.04f + 1.6f * sinf(fy * 0.06f + wtime * 0.025f)) *
+                           sinf(fy * 0.07f - wtime * 0.03f + 1.3f * sinf(fx * 0.05f - wtime * 0.02f));
+                wv = wv > 0.0f ? wv * wv : 0.0f;
+                float f = p->waves * wv;
+                if (p->waves_water) {
+                    f *= wat[(2 * y) * hw + 2 * x];
+                }
+                lr += f * 0.30f;
+                lg += f * 0.75f;
+                lb += f;
+            }
+            if (p->glows > 0.0f && !cell_solid) {
+                for (int k = 0; k < 5; k++) { /* dark violet glows (r, 0, 2r) that wander slowly: they colour the background as lights do */
+                    float gx = (float)w * (0.5f + 0.48f * sinf(time * (0.0045f + 0.0011f * (float)k) + (float)k * 1.9f));
+                    float gy = (float)rows * (0.5f + 0.40f * sinf(time * (0.0038f + 0.0013f * (float)k) + (float)k * 2.7f));
+                    float dx = fx - gx, dy = fy - gy, d = sqrtf(dx * dx + dy * dy) * (1.0f / 42.0f);
+                    if (d < 1.0f) {
+                        float f = (1.0f - d) * (1.0f - d) * p->glows * (0.6f + 0.4f * sinf(time * 0.03f + (float)k * 1.1f));
+                        lr += f;
+                        lb += 2.0f * f;
+                    }
+                }
+            }
+            size_t i = ((size_t)y * (size_t)qw + (size_t)x) * 3;
+            lm[i] = lr;
+            lm[i + 1] = lg;
+            lm[i + 2] = lb;
+            gm[i] = gr;
+            gm[i + 1] = gg;
+            gm[i + 2] = gb;
+        }
+    }
+}
 
 /* Pass 1: the colours as floats, and the brightness of the picture at half size (the bright parts are small lamps of their own). */
 static void phase_convert(int first, int last) {
@@ -276,60 +342,11 @@ void lighting_apply(uint32_t *pic, int w, int h, const LightSource *lights, int 
     box_blur(pool, scratch, hw, hh, 2, 3);
 
     /* the light map (a value per 4x4 pixels): the lights, with their shadows, then the glows that drift in the background */
-    for (int y = 0; y < qh; y++) {
-        for (int x = 0; x < qw; x++) {
-            float fx = (float)(4 * x + 2), fy = (float)(4 * y + 2), lr = 0.0f, lg = 0.0f, lb = 0.0f, gr = 0.0f, gg = 0.0f, gb = 0.0f;
-            int cell_solid = solid8 && solid8[((4 * y + 2) >> 3) * (w / 8) + ((4 * x + 2) >> 3)];
-            for (int k = 0; k < count; k++) {
-                float dx = fx - lights[k].x, dy = (fy - lights[k].y) * 1.1f;
-                float d = sqrtf(dx * dx + dy * dy) / (lights[k].radius * wave * (cell_solid ? 1.0f : p->far_light));
-                if (d < 1.0f && !(solid8 && blocked(solid8, w / 8, rows / 8, lights[k].x, lights[k].y, fx, fy))) {
-                    float e = 1.0f - d, f = e * sqrtf(e) * lights[k].intensity * (cell_solid ? p->solid_light : 1.0f); /* e to the power 1.5 */
-                    lr += f * lights[k].r;
-                    lg += f * lights[k].g;
-                    lb += f * lights[k].b;
-                    gr += e * e * (3.0f - 2.0f * e) * lights[k].glow * lights[k].r;
-                    gg += e * e * (3.0f - 2.0f * e) * lights[k].glow * lights[k].g;
-                    gb += e * e * (3.0f - 2.0f * e) * lights[k].glow * lights[k].b;
-                }
-            }
-            if (p->waves > 0.0f && !cell_solid &&
-                (!p->waves_water ||
-                 wat[(2 * y) * hw + 2 * x] >
-                     0.3f)) { /* bands of light that drift, like the light on the ceiling of a room above water: the product of two slow waves */
-                float wtime = time * (p->wave_speed > 0.0f ? p->wave_speed : 1.0f);
-                float wv = sinf(fx * 0.045f + wtime * 0.04f + 1.6f * sinf(fy * 0.06f + wtime * 0.025f)) *
-                           sinf(fy * 0.07f - wtime * 0.03f + 1.3f * sinf(fx * 0.05f - wtime * 0.02f));
-                wv = wv > 0.0f ? wv * wv : 0.0f;
-                float f = p->waves * wv;
-                if (p->waves_water) {
-                    f *= wat[(2 * y) * hw + 2 * x];
-                }
-                lr += f * 0.30f;
-                lg += f * 0.75f;
-                lb += f;
-            }
-            if (p->glows > 0.0f && !cell_solid) {
-                for (int k = 0; k < 5; k++) { /* dark violet glows (r, 0, 2r) that wander slowly: they colour the background as lights do */
-                    float gx = (float)w * (0.5f + 0.48f * sinf(time * (0.0045f + 0.0011f * (float)k) + (float)k * 1.9f));
-                    float gy = (float)rows * (0.5f + 0.40f * sinf(time * (0.0038f + 0.0013f * (float)k) + (float)k * 2.7f));
-                    float dx = fx - gx, dy = fy - gy, d = sqrtf(dx * dx + dy * dy) * (1.0f / 42.0f);
-                    if (d < 1.0f) {
-                        float f = (1.0f - d) * (1.0f - d) * p->glows * (0.6f + 0.4f * sinf(time * 0.03f + (float)k * 1.1f));
-                        lr += f;
-                        lb += 2.0f * f;
-                    }
-                }
-            }
-            size_t i = ((size_t)y * (size_t)qw + (size_t)x) * 3;
-            lm[i] = lr;
-            lm[i + 1] = lg;
-            lm[i + 2] = lb;
-            gm[i] = gr;
-            gm[i + 1] = gg;
-            gm[i + 2] = gb;
-        }
-    }
+    job.lights = lights;
+    job.count = count;
+    job.solid8 = solid8;
+    job.wave = wave;
+    parallel_rows(phase_lightmap, qh);
     if (solid8) { /* the edges of the shadows of the platforms are soft */
         for (int c = 0; c < 3; c++) {
             for (int i = 0; i < qw * qh; i++) {
