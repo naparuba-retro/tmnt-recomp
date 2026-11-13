@@ -5,6 +5,7 @@
 #include "enemy.h"
 #include "hal.h"
 #include "pause.h"
+#include "persist.h"
 #include "player.h"
 #include "sound.h"
 #include "stage.h"
@@ -28,6 +29,7 @@ static void clear_all_entities(Game *g) /* B7 $EF5C */
 
 void mode3_new_game(Game *g) /* B7 $C686 GameMode3 */
 {
+    persist_reset(g); /* a new game: the enemies come back */
     M(StageState) = 0;
     clear_game_ram48(g);
     M(SideViewFlag)++;

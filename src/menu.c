@@ -633,10 +633,10 @@ static void draw_edition(const Env *e, int ed, float x, float y, float w, float 
         ui_text_wrapped(e->ui, font_body, 25.0f * e->s, X(e, x + 40), Y(e, y + 190), (w - 100) * e->s, 31.0f * e->s, INK, original_text);
         ui_text_wrapped(e->ui, font_body, 21.0f * e->s, X(e, x + 40), Y(e, y + 250), (w - 100) * e->s, 27.0f * e->s, INK, original_text2);
     } else {
-        static const OptId rows[9] = {OPT_FIX_CEILING, OPT_FIX_WATER, OPT_FIX_HITBOX, OPT_FIX_CAMERA, OPT_SPAWN_MASK,
-                                      OPT_BAL_DAMAGE,  OPT_BAL_REACH, OPT_LARGE_VIEW, OPT_NO_FLICKER};
-        for (int i = 0; i < 9; i++) {
-            float ry = y + 34 + (float)i * 31.0f;
+        static const OptId rows[10] = {OPT_FIX_CEILING, OPT_FIX_WATER, OPT_FIX_HITBOX, OPT_FIX_CAMERA, OPT_SPAWN_MASK,
+                                       OPT_BAL_DAMAGE,  OPT_BAL_REACH, OPT_STAY_DEAD,  OPT_LARGE_VIEW, OPT_NO_FLICKER};
+        for (int i = 0; i < 10; i++) {
+            float ry = y + 30 + (float)i * 28.5f;
             UiQuad rq = quad(e, x + 28, ry + 1, 28, 28, 0); /* only the tick answers to a click: the label and the rest of the panel select the edition */
             reg(K_OPT, (int)rows[i], rq, 1);
             checkbox(e, x + 30, ry + 2, 24, opt_get(rows[i]), 1);

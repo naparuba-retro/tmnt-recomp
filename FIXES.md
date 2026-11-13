@@ -33,6 +33,7 @@ How to switch them on, for tests and demonstrations:
 | PIZZA-005 (spawn mask, key S) | Enemy spawns listed in a file written by the spawn editor (`spawn_editor/`) are not created, one by one and per sprite set; the bosses never | the editor and `sessions/spawn_mask` (`bash tools/spawn_mask_check.sh`) | none (the option is off in the replays; with an empty or wrong mask the RAM is identical to the original's on 1916 frames) |
 | PIZZA-006 (balance, key R) | The damage of a normal attack is raised for Leonardo (7 to 14), Raphael (9 to 20) and Michelangelo (7 to 14); Donatello stays at 15 | the damage table of the game (bank 6 `$9BCB`) and a measure on the four turtles (`bash tools/balance_check.sh`) | none (the option is off in the replays) |
 | PIZZA-007 (balance, key R) | The hit box of Raphael's sai is 7 pixels wider each side: 35 pixels of reach in front of him instead of 28 | the hit box tables of the game (bank 6 `$8935`, `$8A43`) and a measure with dummy enemies (`bash tools/balance_check.sh`) | none (off in the replays) |
+| PIZZA-008 (stay dead) | An enemy that the player defeats does not come back: not when leaving and re-entering a building or a sewer, not when the camera passes over its place again; a wave that is over stays over; a new game brings everything back | a recorded game (`bash tools/stay_dead_check.sh`) | none (off in the replays) |
 
 ## PIZZA-001: a ceiling no longer stops the turtle's horizontal speed
 
@@ -205,3 +206,17 @@ up, straight, down).
 box view, `src/hitbox_view.c`): 35 pixels of reach straight (28 up, 35 down instead of 21 and 28), a box of 25 by 17 pixels, which also reaches 7 pixels more behind him.
 
 **Evidence.** `bash tools/balance_check.sh`: the farthest dummy enemy that is hit is at 31 pixels without the option and 38 with it; the hit box view stays equal to the game's formula.
+
+## PIZZA-008: the enemies that are defeated stay dead (menu option "Stay dead")
+
+**Problem.** The game forgets everything at every door: going into a building or a sewer empties all the entities and resets the masks of the zone, and the spawn lists of the ROM have no
+memory (an entry spawns again each time the camera passes over it). A building that was cleaned is full again as soon as the player comes back.
+
+**Fix.** `src/persist.c`. One bit per entry of the spawn lists (bank 6) remembers the entries whose enemy was defeated by the player (a blow, or the van), and `spawn_at` skips them
+(the same "skipped" answer as the spawn mask). A table tells for every entity the entry that created it (filled at the spawn, cleared by `clear_entity`). The waves are kept per level and
+zone (`waves_done`), and restored at the door. The bosses keep their own memory (`WaveDoneMask`). The data is in `Game`, outside the NES RAM: the F9 snapshots restore it and the comparisons
+with the emulators do not see it. A new game (the title screen, or PLAY in the menu) brings every enemy back.
+
+**Not kept.** An enemy that is hurt but alive, one that only went out of the screen, the projectiles, the pickups (they come back as before).
+
+**Evidence.** `bash tools/stay_dead_check.sh` replays the reference game with the option on: enemies are remembered and later spawns are skipped; the replays without the option are unchanged.

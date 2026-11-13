@@ -35,6 +35,9 @@ void clear_entity(Game *g, int x) /* $EF67 */
     }
     clear_vel_x(g, x);
     clear_vel_y(g, x);
+    if (x >= 0 && x < 16) {
+        g->spawn_origin[x] = 0; /* persist.h */
+    }
 }
 
 void move_entity_x(Game *g, int x) /* $EF2C */

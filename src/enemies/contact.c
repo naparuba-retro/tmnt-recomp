@@ -1,5 +1,6 @@
 /* Contact with the player, bonuses, barricades, crates, and the player's weapon hitting enemies. */
 #include "game.h"
+#include "persist.h"
 #include "fixes.h"
 #include "enemy.h"
 #include "hal.h"
@@ -186,6 +187,7 @@ void player_hit_by_enemy(Game *g, int x) {
     }
     if (t == 0x40 && M(InVanFlag)) { /* B6 $97AF: the van crushes the enemy */
         sound_play(g, 0x22);
+        persist_note_death(g, x);
         squash_entity(g, x, 0x2C, 0xAE);
         return;
     }
@@ -308,6 +310,7 @@ void enemy_hit_by_weapon(Game *g, int x, int y) {
         return;
     }
     M(EntHealth + x) = 0; /* the enemy is defeated */
+    persist_note_death(g, x);
     if (type >= 0x70 && type < 0x80) {
         M(0xD2) = R6(0x9A7F + (type & 0x0F));
         M(0x03D8) = 0;

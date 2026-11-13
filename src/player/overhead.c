@@ -2,6 +2,7 @@
 #include "game.h"
 #include "anim.h"
 #include "hal.h"
+#include "persist.h"
 #include "player.h"
 #include "sound.h"
 #include "stage.h"
@@ -127,6 +128,7 @@ void door_transition(Game *g) {
     M(EntXFrac) = M(EntYFrac) = M(EntAttr) = M(EntSprite) = M(EntAnimId) = 0;
     M(EntRoutine) = M(EntSprite + 1) = 0;
     M(PickedUpMask) = M(0x58) = M(WaveTriggersUsed) = M(WaveActive) = M(WaterCurrent) = M(PushZone) = M(ColumnsDestroyedMask) = 0;
+    M(WaveTriggersUsed) = persist_waves_over(g); /* Whole Pizza: the waves that are over stay over */
     M(ElapsedTimeLo) = M(ElapsedTimeHi) = 0;
     M(LevelScoreBcd) = M(0xC6) = M(0xC7) = 0;
     M(RopeSectionUsed) = M(0x03F8) = M(0x03F9) = M(0x03FA) = 0;

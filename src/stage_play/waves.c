@@ -3,6 +3,7 @@
 #include "anim.h"
 #include "enemy.h"
 #include "hal.h"
+#include "persist.h"
 #include "player.h"
 #include "sound.h"
 #include "stage.h"
@@ -32,6 +33,7 @@ static void wave_state2(Game *g) /* B6 $9DA8: waits for the end of the enemies, 
         return;
     }
     M(WaveTriggersUsed) |= R7(0xF137 + M(0xAF));
+    persist_note_wave(g, R7(0xF137 + M(0xAF)));
     wave_end(g);
     restart_level_music(g);
 }

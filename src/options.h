@@ -15,6 +15,7 @@ typedef enum {
     OPT_SPAWN_MASK,  /* PIZZA-005 */
     OPT_BAL_DAMAGE,  /* PIZZA-006 */
     OPT_BAL_REACH,   /* PIZZA-007 */
+    OPT_STAY_DEAD,   /* PIZZA-008: the enemies that are defeated stay dead */
     OPT_LARGE_VIEW,
     OPT_NO_FLICKER,
     /* extras: third-party options */

@@ -5,6 +5,7 @@
 #include "hal.h"
 #include "player.h"
 #include "stage.h"
+#include "persist.h"
 #include "spawn_mask.h"
 #include "stage_play.h"
 #define TODO_AREA "enemy" /* prefix of the TODO traces of this file */
@@ -135,6 +136,11 @@ static int spawn_at(Game *g, uint8_t y0, int mode) /* mode 0: normal, 2: $82C9 (
             return SPAWN_SKIPPED;
         }
     }
+    uint16_t entry = (uint16_t)(ptr(g, SpawnListPtrLo) + y0);
+    int listed = mode == 0 && !M(WaveActive); /* the enemies of a wave are not kept: the waves are (a zone at a time) */
+    if (listed && persist_is_dead(g, entry)) {
+        return SPAWN_SKIPPED; /* Whole Pizza: this enemy was defeated, it does not come back */
+    }
     uint8_t x = mode == 1 ? 0x0E : 5; /* B7 $EEF2 FindFreeEntitySlot: entities 5 to 10 ($EEE0: 14 and 15) */
     uint8_t end = mode == 1 ? 0x10 : 0x0B;
     while (M(EntType + x)) {
@@ -164,7 +170,11 @@ static int spawn_at(Game *g, uint8_t y0, int mode) /* mode 0: normal, 2: $82C9 (
         t = rdmem(g, (uint16_t)(tbl + (t & 7)));
         M(EntType + x) = t;
     }
-    return init_entity_type_tail(g, x, t) ? -1 : x;
+    if (init_entity_type_tail(g, x, t)) {
+        return -1;
+    }
+    persist_note_spawn(g, x, listed ? entry : 0);
+    return x;
 }
 
 /* B6 $85CC: enemies of the start screen of a side-view zone */

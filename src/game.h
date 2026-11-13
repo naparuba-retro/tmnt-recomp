@@ -58,7 +58,10 @@ typedef struct Game {
     FILE *trace;
     void (*sound_tap)(struct Game *g); /* called after each sound driver update, that is each NMI (NULL : nothing) */
     uint32_t frame;
-    int left_attract; /* 1 when the port leaves the title/intro scope (GameMode >= 4) */
+    int left_attract;          /* 1 when the port leaves the title/intro scope (GameMode >= 4) */
+    uint8_t dead_spawns[2048]; /* persist.h: one bit per entry of the spawn lists (not NES memory) */
+    uint16_t spawn_origin[16]; /* persist.h: the entry that created each entity */
+    uint8_t waves_done[8][32]; /* persist.h: the waves that are over, per level and zone */
 } Game;
 
 #ifdef CHECKED /* diagnostic build (tmnt_replay_checked.exe) : every invariant is verified, any failure stops the program */

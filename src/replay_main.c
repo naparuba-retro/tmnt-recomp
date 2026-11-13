@@ -32,6 +32,7 @@
 #include "player/scroll.h"
 #include "fixes.h"
 #include "enemy.h"
+#include "persist.h"
 #include "spawn_mask.h"
 #include "crt.h"
 #include "lighting.h"
@@ -1450,6 +1451,10 @@ int main(int argc, char **argv) {
     if (getenv("TMNT_SPAWN_MASK")) { /* tests only: the spawn mask file (tools/spawn_mask_check.sh) */
         spawn_mask_load(getenv("TMNT_SPAWN_MASK"), g->rom, 0);
         spawn_mask_set_enabled(1);
+    }
+    if (getenv("TMNT_STAY_DEAD")) { /* tests only: the enemies stay dead (tools/stay_dead_check.sh) */
+        persist_set_enabled(1);
+        atexit(persist_report);
     }
     if (getenv("TMNT_HITBOX")) { /* fills the hit box journal (tests: the game must not change, and the formula must match the game's boxes) */
         hitbox_set_enabled(1);

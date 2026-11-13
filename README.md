@@ -90,6 +90,7 @@ These are **suggestions of the author**, not corrections: they change the diffic
 | **Spawn mask** | A fairer game: removes the enemies that are placed in a sneaky way (only the ones still to come, never the bosses). |
 | **Damage balance** | The normal attacks hit harder: Leonardo 7 to 14, Raphael 9 to 20, Michelangelo 7 to 14 (Donatello stays at 15). |
 | **Raph's reach** | The sai of Raphael reaches 35 pixels in front of him instead of 28. |
+| **Stay dead** | The enemies you defeat stay defeated, even when you leave a building or a sewer and come back. A new game brings them back. |
 
 ### Display (no effect on the game)
 

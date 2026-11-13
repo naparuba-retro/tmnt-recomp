@@ -8,6 +8,7 @@
 #include "large_view.h"
 #include "options.h"
 #include "ppu.h"
+#include "persist.h"
 #include "spawn_mask.h"
 
 static const OptInfo info[OPT_COUNT] = {
@@ -26,6 +27,10 @@ static const OptInfo info[OPT_COUNT] = {
     [OPT_BAL_DAMAGE] = {"damage_balance", "whole_pizza", "Damage balance", "More damage per hit: Leonardo 14, Raphael 20, Michelangelo 14, Donatello 15.", 0, 0,
                         1, 1, 1},
     [OPT_BAL_REACH] = {"raph_reach", "whole_pizza", "Raph's reach", "The sai of Raphael reaches 35 pixels in front of him instead of 28.", 0, 0, 1, 1, 1},
+    [OPT_STAY_DEAD] =
+        {"stay_dead", "whole_pizza", "Stay dead",
+         "The enemies you defeat stay defeated: they do not come back when you leave a building or a sewer and come in again. A new game brings them back.", 0,
+         0, 1, 1, 1},
     [OPT_LARGE_VIEW] = {"large_view", "whole_pizza", "Large view", "No random tiles at the top and the edges of the screen: they show the map.", 0, 0, 1, 1, 1},
     [OPT_NO_FLICKER] = {"no_flicker", "whole_pizza", "No flicker", "All the sprites of a line are drawn, not only 8: no more blinking sprites.", 0, 0, 1, 1, 1},
     [OPT_HITBOX_VIEW] = {"hitbox_view", "extras", "Hitbox view", "Shows the boxes that the game tests (key H).", 0, 0, 1, 1, 1},
@@ -95,6 +100,8 @@ int opt_get(OptId id) {
             return fix_enabled(FIX_BALANCE_DAMAGE);
         case OPT_BAL_REACH:
             return fix_enabled(FIX_RAPH_REACH);
+        case OPT_STAY_DEAD:
+            return persist_enabled();
         case OPT_LARGE_VIEW:
             return large_view_enabled();
         case OPT_NO_FLICKER:
@@ -135,6 +142,9 @@ void opt_set(OptId id, int value) {
             break;
         case OPT_BAL_REACH:
             fix_set(FIX_RAPH_REACH, value);
+            break;
+        case OPT_STAY_DEAD:
+            persist_set_enabled(value);
             break;
         case OPT_LARGE_VIEW:
             large_view_set_enabled(value);
