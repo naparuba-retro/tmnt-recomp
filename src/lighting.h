@@ -39,6 +39,7 @@ typedef struct {
     float mist_speed;  /* how fast it drifts (1 = slowly) */
     int waves_water;   /* the waves of light are only over the water */
     float wave_speed;  /* how fast the waves of light move (1 = the default, 0 counts as 1) */
+    int dust;          /* the motes of dust that float in the light (how many, 0 = none) */
 } LightParams;
 
 /* Lights the picture in place. `frame` is the frame counter (the flicker, the noise, the glows). `solid8` (may be NULL) tells which squares of 8x8 pixels are solid (floors,

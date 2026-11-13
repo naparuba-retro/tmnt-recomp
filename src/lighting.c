@@ -456,4 +456,25 @@ void lighting_apply(uint32_t *pic, int w, int h, const LightSource *lights, int 
             }
         }
     }
+    for (int i = 0; i < p->dust; i++) { /* motes of dust: they drift slowly, belong to the world, and catch the light */
+        unsigned hsh = (unsigned)(i + 1) * 2654435761u;
+        hsh = (hsh ^ (hsh >> 15)) * 2246822519u;
+        hsh ^= hsh >> 13;
+        float ph = (float)(hsh & 1023u) * 0.0061f, ph2 = (float)((hsh >> 10) & 1023u) * 0.0061f;
+        float bx = (float)((hsh >> 3) % 400u), by = (float)((hsh >> 12) % (unsigned)rows);
+        float sx = fmodf(bx - (float)p->scroll_x * 0.9f + 4000.0f, 400.0f) - 72.0f + 7.0f * sinf(time * 0.013f + ph);
+        float sy = by + 5.0f * sinf(time * 0.017f + ph2) + 0.02f * time;
+        sy = fmodf(sy, (float)rows);
+        int px = (int)sx, py = (int)sy;
+        if (px < 1 || py < 1 || px >= w - 1 || py >= rows - 1 || (solid8 && solid8[(py >> 3) * (w / 8) + (px >> 3)])) {
+            continue;
+        }
+        float tw = 0.5f + 0.5f * sinf(time * 0.05f + ph * 3.0f);
+        uint32_t c = pic[(size_t)py * (size_t)w + (size_t)px];
+        float lum = (float)(((c >> 16) & 255) + ((c >> 8) & 255) + (c & 255)) / 765.0f;
+        float k = tw * (0.15f + 0.9f * lum) * 0.55f;
+        float r = (float)((c >> 16) & 255) + 255.0f * k, g = (float)((c >> 8) & 255) + 215.0f * k, bl = (float)(c & 255) + 150.0f * k;
+        pic[(size_t)py * (size_t)w + (size_t)px] =
+            ((uint32_t)(r > 255.0f ? 255.0f : r) << 16) | ((uint32_t)(g > 255.0f ? 255.0f : g) << 8) | (uint32_t)(bl > 255.0f ? 255.0f : bl);
+    }
 }

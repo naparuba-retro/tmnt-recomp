@@ -14,7 +14,8 @@
 enum {
     KIND_NONE,
     KIND_SEWER,
-    KIND_STREET
+    KIND_STREET,
+    KIND_WAREHOUSE
 };
 
 /* Is the picture a sewer? The side views of the first level are the sewer (bluish bricks) and the warehouses (brown). The answer is a steady one: a score that goes up and down
@@ -52,7 +53,10 @@ static int scene_kind(Game *g, const uint32_t *screen, int instant) {
     if (!g->ram[SideViewFlag]) {
         return KIND_STREET;
     }
-    return sewer_now(g, screen, instant) ? KIND_SEWER : KIND_NONE;
+    if (getenv("TMNT_WAREHOUSE")) { /* a test: every side view as a warehouse */
+        return KIND_WAREHOUSE;
+    }
+    return sewer_now(g, screen, instant) ? KIND_SEWER : KIND_WAREHOUSE;
 }
 
 static const LightParams sewer_base = {
@@ -78,6 +82,8 @@ static const LightParams sewer_base = {
     0.0f, /* mist over the water */
     1.0f, /* mist speed */
     0,    /* waves everywhere */
+    1.0f, /* wave speed */
+    0,    /* no dust */
 };
 
 /* The street: seen from above, in the light of the end of the day, with a mist that drifts over the land and gathers over the river, where the light moves in waves. */
@@ -93,7 +99,7 @@ static const LightParams street_base = {
     0.0f,                  /* glows */
     0.35f,                 /* the light that the buildings get */
     1.0f,                  /* the lights reach as far everywhere */
-    0.45f,                 /* the waves of light: over the water */
+    0.75f,                 /* the waves of light: over the water */
     0,                     /* no drops */
     18.0f,                 /* no glow around the turtle */
     0.06f,                 /* vignette */
@@ -104,6 +110,36 @@ static const LightParams street_base = {
     0.30f, /* and more over the water */
     1.0f,  /* mist speed */
     1,     /* the waves of light are over the water only */
+    0.5f,  /* and they move slowly */
+    0,     /* no dust */
+};
+
+/* The warehouse: the other rooms seen from the side, with brown walls: a warm dim light from the lamps, and dust that floats in it. */
+static const LightParams warehouse_base = {
+    {0.66f, 0.60f, 0.58f}, /* ambient: warm and dim */
+    0.7f,                  /* the bright parts of the picture light their surroundings */
+    0.35f,                 /* bloom */
+    {0.10f, 0.06f, 0.03f}, /* haze: warm */
+    0.15f,                 /* haze amount */
+    {1.0f, 1.0f, 1.0f},    /* grade */
+    1.0f,                  /* saturation */
+    0.0f,                  /* noise */
+    0.0f,                  /* glows */
+    0.35f,                 /* the light that floors, walls and platforms get */
+    1.3f,                  /* the lights reach farther over the background */
+    0.0f,                  /* no waves of light */
+    0,                     /* no drops */
+    18.0f,                 /* no glow around the turtle */
+    0.30f,                 /* vignette */
+    0.05f,                 /* flicker: the lamps waver */
+    PLAY_ROWS,
+    0,    /* scroll */
+    0.0f, /* mist */
+    0.0f, /* mist over the water */
+    1.0f, /* mist speed */
+    0,    /* waves everywhere */
+    1.0f, /* wave speed */
+    60,   /* dust */
 };
 
 void lighting_game_apply(Game *g, uint32_t *screen, int instant) {
@@ -136,7 +172,7 @@ void lighting_game_apply(Game *g, uint32_t *screen, int instant) {
     int lit_rows = kind == KIND_STREET ? SCREEN_H : PLAY_ROWS; /* from above the picture is all playfield; from the side the status bar is below it */
     static uint32_t before[SCREEN_W * SCREEN_H];
     memcpy(before, screen, (size_t)SCREEN_W * (size_t)lit_rows * sizeof before[0]);
-    LightParams params = kind == KIND_SEWER ? sewer_base : street_base;
+    LightParams params = kind == KIND_SEWER ? sewer_base : kind == KIND_WAREHOUSE ? warehouse_base : street_base;
     params.rows = lit_rows;
     params.scroll_x = g->ram[CameraXLo] | (g->ram[CameraXHi] << 8);
     if (getenv("TMNT_DRIP")) { /* a test: the share of the columns that drip */
@@ -152,7 +188,7 @@ void lighting_game_apply(Game *g, uint32_t *screen, int instant) {
                 uint32_t px = screen[(cy * 8 + 4) * SCREEN_W + cx * 8 + 4];
                 int water = ((px >> 16) & 255) < 64 && (px & 255) > 190; /* the river is blue: it cannot be crossed, but the light goes over it */
                 solid8[cy * (SCREEN_W / 8) + cx] =
-                    kind == KIND_SEWER
+                    kind != KIND_STREET
                         ? c == 4
                         : ((c == 4 || c == 0x0C) && !water); /* from the side the solid class is 4; from above the walls and the buildings are 4 and $0C */
             }
