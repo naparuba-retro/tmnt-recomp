@@ -153,7 +153,8 @@ static void rope_step(Node *n, int count, float wind_x, float sway, const float 
 }
 
 static int in_dam(Game *g) {
-    return opt_get(OPT_ATMOSPHERE) && g->ram[GameMode] == 4 && g->ram[SideViewFlag] && g->ram[LevelNumber] == 1 && g->ram[AreaNumber] == 1;
+    return opt_get(OPT_ATMOSPHERE) && g->ram[GameMode] == 4 && g->ram[StageState] == 6 && g->ram[SideViewFlag] && g->ram[LevelNumber] == 1 &&
+           g->ram[AreaNumber] == 1;
 }
 
 void vines_update(Game *g) {

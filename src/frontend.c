@@ -14,6 +14,7 @@
 #include "large_view.h"
 #include "lighting_game.h"
 #include "vines.h"
+#include "cascades.h"
 #include "menu.h"
 #include "nmi.h"
 #include "options.h"
@@ -295,6 +296,7 @@ static int dump_mode(Game *g, int frames, const char *base) {
             if (shot_list[li] == f) {
                 render(g);
                 vines_draw(g, screen);
+                cascades_draw(g, screen);
                 lighting_game_apply(g, screen, 1);
                 snprintf(name, sizeof name, "%s_%d.bmp", base, f);
                 write_bmp(name);
@@ -303,6 +305,7 @@ static int dump_mode(Game *g, int frames, const char *base) {
         if (shot_from && f >= shot_from && f <= shot_to) {
             render(g);
             vines_draw(g, screen);
+            cascades_draw(g, screen);
             lighting_game_apply(g, screen, 1);
             snprintf(name, sizeof name, "%s_%d.bmp", base, f);
             write_bmp(name);
@@ -317,8 +320,8 @@ static int dump_mode(Game *g, int frames, const char *base) {
         fclose(hash_log);
     }
     if (getenv("TMNT_DUMP_RAM")) {
-        fprintf(stderr, "mode %d level %d area %d side %d option %d\n", g->ram[GameMode], g->ram[LevelNumber], g->ram[AreaNumber], g->ram[SideViewFlag],
-                opt_get(OPT_ATMOSPHERE));
+        fprintf(stderr, "mode %d level %d area %d side %d stage %d scene %d sub %d option %d\n", g->ram[GameMode], g->ram[LevelNumber], g->ram[AreaNumber],
+                g->ram[SideViewFlag], g->ram[StageState], g->ram[SceneId], g->ram[GameSubMode], opt_get(OPT_ATMOSPHERE));
     }
     render(g);
     if (getenv("TMNT_LIGHT_TIME") && opt_get(OPT_ATMOSPHERE)) { /* the cost of the lighting on this frame, averaged over 50 runs */
@@ -328,12 +331,14 @@ static int dump_mode(Game *g, int frames, const char *base) {
         for (int rep = 0; rep < 50; rep++) {
             memcpy(screen, keep, sizeof keep);
             vines_draw(g, screen);
+            cascades_draw(g, screen);
             lighting_game_apply(g, screen, 1);
         }
         fprintf(stderr, "lighting: %.2f ms per picture%c", (now_ms() - t0) / 50.0, 10);
         memcpy(screen, keep, sizeof keep);
     }
     vines_draw(g, screen);
+    cascades_draw(g, screen);
     lighting_game_apply(g, screen, 1);
     snprintf(name, sizeof name, "%s.bmp", base);
     write_bmp(name);
@@ -371,7 +376,7 @@ static Game *load_game(int argc, char **argv) {
     const char *rom = NULL;
     for (int i = 1; i < argc && !rom; i++) {
         if (strncmp(argv[i], "--", 2) && !(i >= 2 && !strcmp(argv[i - 1], "--dump")) && !(i >= 3 && !strcmp(argv[i - 2], "--dump")) &&
-            !(i >= 2 && !strcmp(argv[i - 1], "--input"))) {
+            !(i >= 2 && !strcmp(argv[i - 1], "--input")) && !(i >= 2 && !strcmp(argv[i - 1], "--state"))) {
             rom = argv[i];
         }
     }
@@ -793,6 +798,7 @@ static void run_game_frame(Game *g, int audio) {
     double t_c = now_ms();
     render(g);
     vines_draw(g, screen);
+    cascades_draw(g, screen);
     lighting_game_apply(g, screen, 0);
     double t_d = now_ms();
     if (opt_get(OPT_SHOW_FPS)) {
@@ -967,6 +973,29 @@ int main(int argc, char **argv) {
         }
     }
     open_logs(g);
+    for (int i = 1; i + 1 < argc; i++) { /* --state file: starts from a state saved by F10 (tmnt_capture_N.state), made by this version of the game */
+        if (!strcmp(argv[i], "--state")) {
+            FILE *sf = fopen(argv[i + 1], "rb");
+            Game *saved = calloc(1, sizeof *saved);
+            if (sf && saved && fread(saved, sizeof *saved, 1, sf) == 1) {
+                Rom *rom = g->rom;
+                FILE *tr = g->trace;
+                void (*tap)(struct Game *) = g->sound_tap;
+                *g = *saved;
+                g->rom = rom;
+                g->trace = tr;
+                g->sound_tap = tap;
+                start_water = 0;
+                no_menu = 1;
+            } else {
+                fprintf(stderr, "--state: cannot read %s (a state saved by another version cannot be loaded)\n", argv[i + 1]);
+            }
+            if (sf) {
+                fclose(sf);
+            }
+            free(saved);
+        }
+    }
     if (start_water && !water_fast_forward(g)) {
         start_water = 0;
     }

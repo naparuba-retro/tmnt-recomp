@@ -47,7 +47,7 @@ static int sewer_now(Game *g, const uint32_t *screen, int instant) {
 }
 
 static int scene_kind(Game *g, const uint32_t *screen, int instant) {
-    if (g->ram[GameMode] != 4) {
+    if (g->ram[GameMode] != 4 || g->ram[StageState] != 6) { /* not the screens of information between two games ($07), nor the start of a level */
         return KIND_NONE;
     }
     if (!g->ram[SideViewFlag]) {
