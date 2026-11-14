@@ -116,6 +116,10 @@ static void entity_rect(Game *g, int x, uint8_t rect[4]) {
     }
 }
 
+void hitbox_entity_rect(Game *g, int x, uint8_t rect[4]) {
+    entity_rect(g, x, rect);
+}
+
 static int entity_active(Game *g, int x) {
     if (x == 0) {
         return (M(EntFlags) & 2) && (M(EntAnimId) | M(EntSprite));

@@ -47,8 +47,10 @@ static const OptInfo info[OPT_COUNT] = {
     [OPT_CRT_SCAN] = {"crt_scanlines", "graphics", "CRT scanlines", "How dark the gap between two lines of the picture is.", 25, 0, 100, 1, 1},
     [OPT_CRT_MASK] = {"crt_mask", "graphics", "CRT mask", "The red, green and blue dots of the screen. It needs a window larger than twice the game's picture.",
                       70, 0, 100, 1, 1},
-    [OPT_ILLUMINATION] = {"illumination", "graphics", "Illumination", "The sewers lit with shadows, glows, waves of light and drops of water (display only).",
-                          0, 0, 1, 1, 1},
+    [OPT_ATMOSPHERE] =
+        {"atmosphere", "graphics", "Atmosphere",
+         "A mood for the places: lights and shadows in the sewers, mist over the river, warm lamps and dust in the buildings, vines in the dam (display only).",
+         0, 0, 1, 1, 1},
     [OPT_CRT_CURVE] = {"crt_curve", "graphics", "CRT curve", "The curved glass of a tube. 0 is flat (and faster).", 5, 0, 100, 1, 1},
 #define KEYOPT(row, name, label)                                                                                                                               \
     [OPT_KEY_FIRST + (row) * 2] = {"key_" name "_1", "keys", label " key 1", "The first key of this pad button (0: default, -1: none).", 0, -1, 4096, 1, 1},   \
@@ -314,6 +316,9 @@ void options_load(const char *path) {
         }
         *eq = 0;
         char *key = trim(s), *value = trim(eq + 1);
+        if (!strcmp(key, "illumination")) { /* the name that this option had in version 1.7.0 */
+            key = "atmosphere";
+        }
         for (int id = 0; id < OPT_COUNT; id++) {
             if (info[id].persist && !strcmp(info[id].section, section) && !strcmp(info[id].key, key)) {
                 char *end;

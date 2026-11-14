@@ -145,7 +145,7 @@ static const LightParams warehouse_base = {
 void lighting_game_apply(Game *g, uint32_t *screen, int instant) {
     static float fade;
     static int kind;
-    if (!opt_get(OPT_ILLUMINATION)) {
+    if (!opt_get(OPT_ATMOSPHERE)) {
         fade = 0.0f;
         return;
     }

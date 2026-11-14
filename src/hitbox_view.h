@@ -19,6 +19,9 @@ void hitbox_note_pair(Game *g, int x, int y, int touching); /* hitboxes_overlap(
 /* End of every logic frame: records the boxes of the entities (same formula as the game's, checked against it by the hooks above). */
 void hitbox_end_frame(Game *g);
 
+/* The box of entity x (left, right, top, bottom, in screen pixels), as the game computes it; nothing is written. */
+void hitbox_entity_rect(Game *g, int x, uint8_t rect[4]);
+
 /* Draws the boxes on the 256x240 picture (0xRRGGBB). The picture of frame N shows the sprites built from the state after logic frame N-2. */
 void hitbox_draw(Game *g, uint32_t *screen);
 

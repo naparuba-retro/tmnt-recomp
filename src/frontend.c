@@ -13,6 +13,7 @@
 #include "hitbox_view.h"
 #include "large_view.h"
 #include "lighting_game.h"
+#include "vines.h"
 #include "menu.h"
 #include "nmi.h"
 #include "options.h"
@@ -149,8 +150,9 @@ static void capture(Game *g) {
 static FILE *input_log;
 static FILE *poke_log; /* tmnt_pokes.txt: "frame address value", format of build/pk_*.txt (replay in the port) */
 static int start_level2, level2_done, no_menu;
-static int random_seed;       /* --random-seed: randomises RandomSeed when --levelN jumps to the level */
-static int start_level_n = 1; /* --level2: 1; --level3: 2; --level4: 3 (value of LevelNumber and AreaNumber of the street) */
+static int start_water, fast_forward; /* --level2-water: the game is played at once up to the dam of level 2 (nothing is shown or recorded) */
+static int random_seed;               /* --random-seed: randomises RandomSeed when --levelN jumps to the level */
+static int start_level_n = 1;         /* --level2: 1; --level3: 2; --level4: 3 (value of LevelNumber and AreaNumber of the street) */
 static uint8_t input_mask;
 
 /* --input file: plays the pad from a file of ranges "first last mask" (the format of tmnt_input.txt), frames counted from the launch, instead of the
@@ -201,7 +203,7 @@ static void write_input_range(uint32_t first, uint32_t last, uint32_t mask) {
 }
 
 static void record_input(Game *g) {
-    if (!input_log) {
+    if (!input_log || fast_forward) {
         return;
     }
     uint32_t f = g->frame - 1;
@@ -292,6 +294,7 @@ static int dump_mode(Game *g, int frames, const char *base) {
         for (int li = 0; li < shot_list_n; li++) { /* TMNT_DUMP_LIST=<file>: one frame number per line, a picture of each (name_N.bmp) */
             if (shot_list[li] == f) {
                 render(g);
+                vines_draw(g, screen);
                 lighting_game_apply(g, screen, 1);
                 snprintf(name, sizeof name, "%s_%d.bmp", base, f);
                 write_bmp(name);
@@ -299,6 +302,7 @@ static int dump_mode(Game *g, int frames, const char *base) {
         }
         if (shot_from && f >= shot_from && f <= shot_to) {
             render(g);
+            vines_draw(g, screen);
             lighting_game_apply(g, screen, 1);
             snprintf(name, sizeof name, "%s_%d.bmp", base, f);
             write_bmp(name);
@@ -314,20 +318,22 @@ static int dump_mode(Game *g, int frames, const char *base) {
     }
     if (getenv("TMNT_DUMP_RAM")) {
         fprintf(stderr, "mode %d level %d area %d side %d option %d\n", g->ram[GameMode], g->ram[LevelNumber], g->ram[AreaNumber], g->ram[SideViewFlag],
-                opt_get(OPT_ILLUMINATION));
+                opt_get(OPT_ATMOSPHERE));
     }
     render(g);
-    if (getenv("TMNT_LIGHT_TIME") && opt_get(OPT_ILLUMINATION)) { /* the cost of the lighting on this frame, averaged over 50 runs */
+    if (getenv("TMNT_LIGHT_TIME") && opt_get(OPT_ATMOSPHERE)) { /* the cost of the lighting on this frame, averaged over 50 runs */
         static uint32_t keep[SCREEN_W * SCREEN_H];
         memcpy(keep, screen, sizeof keep);
         double t0 = now_ms();
         for (int rep = 0; rep < 50; rep++) {
             memcpy(screen, keep, sizeof keep);
+            vines_draw(g, screen);
             lighting_game_apply(g, screen, 1);
         }
         fprintf(stderr, "lighting: %.2f ms per picture%c", (now_ms() - t0) / 50.0, 10);
         memcpy(screen, keep, sizeof keep);
     }
+    vines_draw(g, screen);
     lighting_game_apply(g, screen, 1);
     snprintf(name, sizeof name, "%s.bmp", base);
     write_bmp(name);
@@ -425,6 +431,9 @@ static void parse_options(int argc, char **argv) {
             start_level2 = 1;
             start_level_n = 5;
         }
+        if (!strcmp(argv[i], "--level2-water")) {
+            start_water = 1;
+        }
         if (!strcmp(argv[i], "--no-menu")) {
             no_menu = 1; /* straight into the game, as before the menu existed */
         }
@@ -515,14 +524,14 @@ static void invincible_cheat(Game *g) {
     if (!(opt_get(OPT_INVINCIBLE) && (g->frame & 3) == 0 && g->ram[GameMode] == 4)) {
         return; /* cheat: health at the maximum every 4 frames, logged for the replay in Mesen */
     }
-    if (!poke_log) {
+    if (!poke_log && !fast_forward) {
         char pf[64];
         snprintf(pf, sizeof pf, "tmnt_pokes%s.txt", log_suffix());
         poke_log = fopen(pf, "a");
     }
     for (int t = 0; t < 4; t++) {
         g->ram[0x77 + t] = 0x80;
-        if (poke_log) {
+        if (poke_log && !fast_forward) {
             fprintf(poke_log, "%u %u %u\n", g->frame, 0x77 + t, 0x80);
         }
     }
@@ -542,8 +551,46 @@ static void logic_frame(Game *g, int keyboard) {
     rng_idle(g);
     nmi_frame(g);
     hitbox_end_frame(g);
+    vines_update(g);
     apply_start_level(g);
     invincible_cheat(g);
+}
+
+/* --level2-water: plays the reference game (the inputs of data/level2_water.txt: the title, level 1, the street and the building of level 2) at once, with nothing shown, and
+ * hands the pad over at the first frame of the dam. The game is deterministic, so it ends in the same place every time. */
+static int water_fast_forward(Game *g) {
+    char dir[1200], file[1300];
+    find_data_dir(dir, sizeof dir);
+    snprintf(file, sizeof file, "%s/level2_water.txt", dir);
+    FILE *probe = fopen(file, "r");
+    if (!probe) {
+        fprintf(stderr, "--level2-water: %s not found\n", file);
+        return 0;
+    }
+    fclose(probe);
+    load_pad_script(file);
+    int was_invincible = opt_get(OPT_INVINCIBLE);
+    opt_set(OPT_INVINCIBLE, 1); /* the reference game was played with the health at the maximum */
+    int saved[OPT_NO_FLICKER - OPT_FIX_CEILING + 1];
+    for (int id = OPT_FIX_CEILING; id <= OPT_NO_FLICKER; id++) { /* and with the game as it was: the options of Whole Pizza are off until the dam */
+        saved[id - OPT_FIX_CEILING] = opt_get((OptId)id);
+        opt_set((OptId)id, 0);
+    }
+    static int16_t pcm[SAMPLES_PER_FRAME];
+    fast_forward = 1;
+    for (int f = 0; f < 15297; f++) {
+        logic_frame(g, 0);
+        apu_mix(g, pcm, SAMPLES_PER_FRAME); /* the sound chip goes on as in a real game */
+    }
+    fast_forward = 0;
+    opt_set(OPT_INVINCIBLE, was_invincible);
+    for (int id = OPT_FIX_CEILING; id <= OPT_NO_FLICKER; id++) {
+        opt_set((OptId)id, saved[id - OPT_FIX_CEILING]);
+    }
+    free(pad_script);
+    pad_script = NULL;
+    pad_script_n = 0;
+    return 1;
 }
 
 /* "Show FPS": the real number of pictures shown per second, in the bottom right corner (digits 3x5 drawn at twice the size, on a black patch). */
@@ -745,6 +792,7 @@ static void run_game_frame(Game *g, int audio) {
     }
     double t_c = now_ms();
     render(g);
+    vines_draw(g, screen);
     lighting_game_apply(g, screen, 0);
     double t_d = now_ms();
     if (opt_get(OPT_SHOW_FPS)) {
@@ -919,6 +967,9 @@ int main(int argc, char **argv) {
         }
     }
     open_logs(g);
+    if (start_water && !water_fast_forward(g)) {
+        start_water = 0;
+    }
     for (int i = 1; i + 2 < argc; i++) {
         if (!strcmp(argv[i], "--dump")) {
             return dump_mode(g, atoi(argv[i + 1]), argv[i + 2]);
@@ -937,7 +988,7 @@ int main(int argc, char **argv) {
         menu_init(data_dir, ini_path);
         menu_set_keys(&menu_keys);
     }
-    game_started = no_menu || start_level2 || pad_script_n > 0;
+    game_started = no_menu || start_level2 || start_water || pad_script_n > 0;
     if (!game_started) { /* the launcher: the menu on its first page, no game under it yet */
         for (int i = 1; i < argc; i++) {
             if (!strcmp(argv[i], "--blur-logo")) { /* screenshots: the game's logo, blurred beyond recognition */

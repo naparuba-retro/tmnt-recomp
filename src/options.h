@@ -29,11 +29,11 @@ typedef enum {
     OPT_FULLSCREEN,
     OPT_INTEGER_SCALE,
     OPT_SHOW_FPS,
-    OPT_CRT,          /* the CRT look (crt.c), drawn by the processor */
-    OPT_CRT_SCAN,     /* 0 to 100 */
-    OPT_CRT_MASK,     /* 0 to 100 */
-    OPT_CRT_CURVE,    /* 0 to 100 */
-    OPT_ILLUMINATION, /* the lighting of lighting.c in the sewers */
+    OPT_CRT,        /* the CRT look (crt.c), drawn by the processor */
+    OPT_CRT_SCAN,   /* 0 to 100 */
+    OPT_CRT_MASK,   /* 0 to 100 */
+    OPT_CRT_CURVE,  /* 0 to 100 */
+    OPT_ATMOSPHERE, /* the mood: the lighting of lighting.c (sewers, streets, warehouses) and the vines of vines.c (dam) */
     /* the keyboard: two keys for each pad button, in the order A, B, Select, Start, Up, Down, Left, Right (OPT_KEY). 0 = the default key of the platform,
      * -1 = no key, otherwise the key code of the platform layer (platform.h) */
     OPT_KEY_FIRST,

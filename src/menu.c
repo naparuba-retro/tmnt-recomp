@@ -504,13 +504,15 @@ static void draw_options_page(const Env *e, const OptId *ids, int count, const c
     ui_halftone_quad(e->ui, &q, 0xF3D9A0, 12.0f * e->s, 1.0f, 0.0f, 255);
     outline(e, &q, 6.0f, INK);
     caption(e, 70, 94, 280, title);
-    float step = count > 10  ? 42.0f
-                 : count > 7 ? 46.0f
-                             : 70.0f,
+    float step = count > 11   ? 38.0f
+                 : count > 10 ? 42.0f
+                 : count > 7  ? 46.0f
+                              : 70.0f,
           first = count > 7 ? 148.0f : 170.0f,
-          height = count > 10  ? 38.0f
-                   : count > 7 ? 42.0f
-                               : 60.0f; /* a page of many options is tighter */
+          height = count > 11   ? 34.0f
+                   : count > 10 ? 38.0f
+                   : count > 7  ? 42.0f
+                                : 60.0f; /* a page of many options is tighter */
     for (int i = 0; i < count; i++) {
         option_row(e, ids[i], 90, first + (float)i * step, 1060, height, 0);
     }
@@ -758,7 +760,7 @@ static void draw_base(Ui *ui, const uint32_t *picture, float *scale) {
     draw_tabs(&e);
     static const OptId sound[] = {OPT_VOLUME, OPT_MUTE};
     static const OptId graphics[] = {OPT_LARGE_VIEW, OPT_NO_FLICKER, OPT_HITBOX_VIEW, OPT_FULLSCREEN, OPT_INTEGER_SCALE, OPT_SHOW_FPS,
-                                     OPT_CRT,        OPT_CRT_SCAN,   OPT_CRT_MASK,    OPT_CRT_CURVE,  OPT_ILLUMINATION};
+                                     OPT_CRT,        OPT_CRT_SCAN,   OPT_CRT_MASK,    OPT_CRT_CURVE,  OPT_ATMOSPHERE};
     switch (page) {
         case 0:
             draw_play_page(&e);
