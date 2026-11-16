@@ -45,12 +45,16 @@ static float clamp01(float v) {
 
 /* The bilinear stretch of a map that is `f` times smaller than the picture: for every column (or line) of the picture, the two values of the map it lies between and the
  * weight of the second one. */
+#define MAX_AXIS (MAX_W > MAX_ROWS ? MAX_W : MAX_ROWS) /* the stretch is made for the columns (MAX_W) as well as for the lines (MAX_ROWS) */
 typedef struct {
-    int i0[MAX_ROWS], i1[MAX_ROWS];
-    float w1[MAX_ROWS];
+    int i0[MAX_AXIS], i1[MAX_AXIS];
+    float w1[MAX_AXIS];
 } Stretch;
 
 static void stretch_axis(Stretch *s, int n, int f, int map_n) {
+    if (n > MAX_AXIS) {
+        n = MAX_AXIS;
+    }
     for (int x = 0; x < n; x++) {
         float u = ((float)x + 0.5f) / (float)f - 0.5f;
         int i = (int)floorf(u);
