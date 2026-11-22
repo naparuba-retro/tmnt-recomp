@@ -9,7 +9,7 @@ on:
 
 # No ROM is available here (and none must be put here): the jobs build the game, check the formatting and run the tests that need no ROM
 # (tools/smoke_test.sh). The replays against the references (tools/ref_run_check.sh) are run locally.
-# Each build is packaged: tmnt-<version>-windows-x64.zip (tmnt.exe) and tmnt-<version>-linux-x86_64.tar.gz (tmnt, executable). They are kept as workflow
+# Each build is packaged (with recomplauncher.json, the file that makes the game work with RecompLauncher, at the top of the folder): tmnt-<version>-windows-x64.zip (tmnt.exe) and tmnt-<version>-linux-x64.tar.gz (tmnt, executable). They are kept as workflow
 # artifacts and, when a tag "v*" is pushed (git tag v1.0.0 && git push origin v1.0.0), attached to a GitHub release. <version> is the tag without its "v",
 # or "dev-<commit>" for a build that is not a release.
 jobs:
@@ -36,9 +36,9 @@ jobs:
         run: |
           VERSION=dev-${GITHUB_SHA::7}
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then VERSION=${GITHUB_REF_NAME#v}; fi
-          NAME=tmnt-$VERSION-linux-x86_64
+          NAME=tmnt-$VERSION-linux-x64
           mkdir -p package/$NAME
-          cp build/tmnt README.md LICENSE package/$NAME/
+          cp build/tmnt README.md LICENSE recomplauncher.json package/$NAME/
           mkdir -p package/$NAME/data
           cp data/spawn_mask.txt package/$NAME/data/
           cp -r data/fonts data/ui package/$NAME/data/
@@ -48,8 +48,8 @@ jobs:
           tar -czf $NAME.tar.gz -C package $NAME
       - uses: actions/upload-artifact@v7
         with:
-          name: tmnt-linux-x86_64
-          path: tmnt-*-linux-x86_64.tar.gz
+          name: tmnt-linux-x64
+          path: tmnt-*-linux-x64.tar.gz
           compression-level: 0
           if-no-files-found: error
 
@@ -70,7 +70,7 @@ jobs:
           if ($env:GITHUB_REF -like "refs/tags/v*") { $version = $env:GITHUB_REF_NAME.Substring(1) }
           $name = "tmnt-$version-windows-x64"
           New-Item -ItemType Directory -Path "package/$name" | Out-Null
-          Copy-Item build/tmnt.exe, README.md, LICENSE "package/$name/"
+          Copy-Item build/tmnt.exe, README.md, LICENSE, recomplauncher.json "package/$name/"
           New-Item -ItemType Directory -Path "package/$name/data" | Out-Null
           Copy-Item data/spawn_mask.txt "package/$name/data/"
           Copy-Item -Recurse data/fonts, data/ui "package/$name/data/"
@@ -99,5 +99,5 @@ jobs:
         with:
           files: |
             packages/tmnt-*-windows-x64.zip
-            packages/tmnt-*-linux-x86_64.tar.gz
+            packages/tmnt-*-linux-x64.tar.gz
           generate_release_notes: true

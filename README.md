@@ -26,7 +26,7 @@ It is not an emulator: the game logic is real C, only the NES hardware (picture,
 
 ## How to play
 
-1. Download the archive of the latest release (the **Releases** page): `tmnt-<version>-windows-x64.zip` or `tmnt-<version>-linux-x86_64.tar.gz`
+1. Download the archive of the latest release (the **Releases** page): `tmnt-<version>-windows-x64.zip` or `tmnt-<version>-linux-x64.tar.gz`
    (Linux needs SDL2: `sudo apt-get install libsdl2-2.0-0`).
 2. Unpack it, and put your ROM (any file name) in the `rom` folder next to the game.
 3. Start `tmnt` (`tmnt.exe` on Windows). If the ROM is missing, the game tells you where to put it.

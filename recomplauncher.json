@@ -1,0 +1,303 @@
+{
+  "$schema": "https://recomplauncher.com/schema/recomplauncher.json",
+  "format": 1,
+  "name": "TMNT Recomp",
+  "repo": "naparuba-retro/tmnt-recomp",
+  "inputs": [
+    {
+      "id": "game",
+      "role": "game",
+      "label": "Your copy of Teenage Mutant Ninja Turtles for the NES (.nes file): the USA or the European release.",
+      "formats": [
+        {
+          "type": "file",
+          "extensions": [
+            "nes"
+          ]
+        }
+      ],
+      "dumps": [
+        {
+          "name": "USA",
+          "size": 262160,
+          "crc32": "120bd608"
+        },
+        {
+          "name": "Europe",
+          "size": 262160,
+          "crc32": "6d1e30a7"
+        }
+      ]
+    }
+  ],
+  "start": {
+    "program": [
+      "tmnt.exe",
+      "tmnt"
+    ],
+    "args": [
+      "{input:game}"
+    ]
+  },
+  "config": [
+    {
+      "id": "main",
+      "format": "ini",
+      "file": [
+        {
+          "path": "{install}/tmnt.ini"
+        }
+      ]
+    }
+  ],
+  "saves": [
+    "{install}/tmnt.ini"
+  ],
+  "folders": {
+    "settings": [
+      {
+        "path": "{install}"
+      }
+    ]
+  },
+  "looks": {
+    "allowed": false,
+    "reason": "The game has its own CRT filter and lighting (Graphics page of its menu)."
+  },
+  "settings": [
+    {
+      "id": "edition",
+      "label": "Edition",
+      "help": "Original plays like the NES game. Whole Pizza adds the fixes and options of this port (a smarter camera, fairer spawns, enemies that stay dead...).",
+      "choices": [
+        {
+          "label": "Original",
+          "set": {
+            "play/edition": "0",
+            "whole_pizza/ceiling_slide": "0",
+            "whole_pizza/water_current": "0",
+            "whole_pizza/hitbox_fixes": "0",
+            "whole_pizza/smart_camera": "0",
+            "whole_pizza/spawn_mask": "0",
+            "whole_pizza/damage_balance": "0",
+            "whole_pizza/raph_reach": "0",
+            "whole_pizza/stay_dead": "0",
+            "whole_pizza/large_view": "0",
+            "whole_pizza/no_flicker": "0"
+          }
+        },
+        {
+          "label": "Whole Pizza",
+          "set": {
+            "play/edition": "1",
+            "whole_pizza/ceiling_slide": "1",
+            "whole_pizza/water_current": "1",
+            "whole_pizza/hitbox_fixes": "1",
+            "whole_pizza/smart_camera": "1",
+            "whole_pizza/spawn_mask": "1",
+            "whole_pizza/damage_balance": "1",
+            "whole_pizza/raph_reach": "1",
+            "whole_pizza/stay_dead": "1",
+            "whole_pizza/large_view": "1",
+            "whole_pizza/no_flicker": "1"
+          }
+        }
+      ],
+      "defaults": {
+        "play/edition": "0",
+        "whole_pizza/ceiling_slide": "0",
+        "whole_pizza/water_current": "0",
+        "whole_pizza/hitbox_fixes": "0",
+        "whole_pizza/smart_camera": "0",
+        "whole_pizza/spawn_mask": "0",
+        "whole_pizza/damage_balance": "0",
+        "whole_pizza/raph_reach": "0",
+        "whole_pizza/stay_dead": "0",
+        "whole_pizza/large_view": "0",
+        "whole_pizza/no_flicker": "0"
+      }
+    },
+    {
+      "id": "start_level",
+      "label": "Start level",
+      "help": "The level where a new game starts when you press PLAY in the game's menu (not used when the menu is skipped).",
+      "choices": [
+        {
+          "label": "Level 1",
+          "set": {
+            "extras/start_level": "1"
+          }
+        },
+        {
+          "label": "Level 2",
+          "set": {
+            "extras/start_level": "2"
+          }
+        },
+        {
+          "label": "Level 3",
+          "set": {
+            "extras/start_level": "3"
+          }
+        },
+        {
+          "label": "Level 4",
+          "set": {
+            "extras/start_level": "4"
+          }
+        },
+        {
+          "label": "Level 5",
+          "set": {
+            "extras/start_level": "5"
+          }
+        },
+        {
+          "label": "Level 6",
+          "set": {
+            "extras/start_level": "6"
+          }
+        }
+      ],
+      "defaults": {
+        "extras/start_level": "1"
+      }
+    },
+    {
+      "id": "fullscreen",
+      "label": "Window",
+      "help": "Fullscreen, or a window you can resize. The picture always keeps its proportions.",
+      "choices": [
+        {
+          "label": "Window",
+          "set": {
+            "graphics/fullscreen": "0"
+          }
+        },
+        {
+          "label": "Fullscreen",
+          "set": {
+            "graphics/fullscreen": "1"
+          }
+        }
+      ],
+      "defaults": {
+        "graphics/fullscreen": "0"
+      }
+    },
+    {
+      "id": "integer_scale",
+      "label": "Integer scaling",
+      "help": "Every pixel of the game the same size: sharper, with black bars when the screen is not a whole multiple.",
+      "choices": [
+        {
+          "label": "Off",
+          "set": {
+            "graphics/integer_scale": "0"
+          }
+        },
+        {
+          "label": "On",
+          "set": {
+            "graphics/integer_scale": "1"
+          }
+        }
+      ],
+      "defaults": {
+        "graphics/integer_scale": "0"
+      }
+    },
+    {
+      "id": "crt",
+      "label": "CRT filter",
+      "help": "The look of a tube TV: scanlines, a phosphor mask and a slightly curved screen.",
+      "choices": [
+        {
+          "label": "Off",
+          "set": {
+            "graphics/crt": "0"
+          }
+        },
+        {
+          "label": "On",
+          "set": {
+            "graphics/crt": "1"
+          }
+        }
+      ],
+      "defaults": {
+        "graphics/crt": "0"
+      }
+    },
+    {
+      "id": "atmosphere",
+      "label": "Atmosphere",
+      "help": "Lights and shadows in the sewers, mist over the river, vines, waterfalls and dust. Display only, the game does not change.",
+      "choices": [
+        {
+          "label": "Off",
+          "set": {
+            "graphics/atmosphere": "0"
+          }
+        },
+        {
+          "label": "On",
+          "set": {
+            "graphics/atmosphere": "1"
+          }
+        }
+      ],
+      "defaults": {
+        "graphics/atmosphere": "0"
+      }
+    },
+    {
+      "id": "show_fps",
+      "label": "Show FPS",
+      "help": "The number of pictures per second in a corner of the screen.",
+      "choices": [
+        {
+          "label": "Off",
+          "set": {
+            "graphics/show_fps": "0"
+          }
+        },
+        {
+          "label": "On",
+          "set": {
+            "graphics/show_fps": "1"
+          }
+        }
+      ],
+      "defaults": {
+        "graphics/show_fps": "0"
+      }
+    },
+    {
+      "id": "menu",
+      "label": "Game menu",
+      "in": "args",
+      "help": "Show the game's own menu (editions, keys, sound, start level...) when it starts, or start playing at once from the first level.",
+      "choices": [
+        {
+          "label": "Show it",
+          "args": []
+        },
+        {
+          "label": "Start at once",
+          "args": [
+            "--no-menu"
+          ]
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "id": "settings",
+      "label": "Settings file",
+      "help": "The folder with tmnt.ini, where the game keeps its settings.",
+      "open": "settings"
+    }
+  ]
+}
