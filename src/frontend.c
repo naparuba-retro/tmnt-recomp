@@ -14,7 +14,9 @@
 #include "large_view.h"
 #include "lighting_game.h"
 #include "vines.h"
+#include "smoke.h"
 #include "cascades.h"
+#include "comic.h"
 #include "menu.h"
 #include "nmi.h"
 #include "options.h"
@@ -295,18 +297,22 @@ static int dump_mode(Game *g, int frames, const char *base) {
         for (int li = 0; li < shot_list_n; li++) { /* TMNT_DUMP_LIST=<file>: one frame number per line, a picture of each (name_N.bmp) */
             if (shot_list[li] == f) {
                 render(g);
+                smoke_draw(g, screen);
                 vines_draw(g, screen);
                 cascades_draw(g, screen);
                 lighting_game_apply(g, screen, 1);
+                comic_draw(g, screen);
                 snprintf(name, sizeof name, "%s_%d.bmp", base, f);
                 write_bmp(name);
             }
         }
         if (shot_from && f >= shot_from && f <= shot_to) {
             render(g);
+            smoke_draw(g, screen);
             vines_draw(g, screen);
             cascades_draw(g, screen);
             lighting_game_apply(g, screen, 1);
+            comic_draw(g, screen);
             snprintf(name, sizeof name, "%s_%d.bmp", base, f);
             write_bmp(name);
         }
@@ -330,16 +336,20 @@ static int dump_mode(Game *g, int frames, const char *base) {
         double t0 = now_ms();
         for (int rep = 0; rep < 50; rep++) {
             memcpy(screen, keep, sizeof keep);
+            smoke_draw(g, screen);
             vines_draw(g, screen);
             cascades_draw(g, screen);
             lighting_game_apply(g, screen, 1);
+            comic_draw(g, screen);
         }
         fprintf(stderr, "lighting: %.2f ms per picture%c", (now_ms() - t0) / 50.0, 10);
         memcpy(screen, keep, sizeof keep);
     }
+    smoke_draw(g, screen);
     vines_draw(g, screen);
     cascades_draw(g, screen);
     lighting_game_apply(g, screen, 1);
+    comic_draw(g, screen);
     snprintf(name, sizeof name, "%s.bmp", base);
     write_bmp(name);
     return 0;
@@ -557,6 +567,7 @@ static void logic_frame(Game *g, int keyboard) {
     nmi_frame(g);
     hitbox_end_frame(g);
     vines_update(g);
+    smoke_update(g);
     apply_start_level(g);
     invincible_cheat(g);
 }
@@ -797,9 +808,11 @@ static void run_game_frame(Game *g, int audio) {
     }
     double t_c = now_ms();
     render(g);
+    smoke_draw(g, screen);
     vines_draw(g, screen);
     cascades_draw(g, screen);
     lighting_game_apply(g, screen, 0);
+    comic_draw(g, screen);
     double t_d = now_ms();
     if (opt_get(OPT_SHOW_FPS)) {
         count_fps();
@@ -973,6 +986,11 @@ int main(int argc, char **argv) {
         }
     }
     open_logs(g);
+    {
+        char comic_dir[1200];
+        find_data_dir(comic_dir, sizeof comic_dir);
+        comic_init(comic_dir); /* the comic-book words use the font of the menu */
+    }
     for (int i = 1; i + 1 < argc; i++) { /* --state file: starts from a state saved by F10 (tmnt_capture_N.state), made by this version of the game */
         if (!strcmp(argv[i], "--state")) {
             FILE *sf = fopen(argv[i + 1], "rb");

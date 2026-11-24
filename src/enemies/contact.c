@@ -1,5 +1,6 @@
 /* Contact with the player, bonuses, barricades, crates, and the player's weapon hitting enemies. */
 #include "game.h"
+#include "comic.h"
 #include "persist.h"
 #include "fixes.h"
 #include "enemy.h"
@@ -225,6 +226,7 @@ void player_hit_by_enemy(Game *g, int x) {
         clear_vel_y(g, x);
     }
     sound_play(g, 0x25);
+    comic_hurt(g);
     if (t == 0x99 || t == 0x93) {
         clear_entity(g, x);
     }
@@ -307,10 +309,12 @@ void enemy_hit_by_weapon(Game *g, int x, int y) {
     }
     if (hp > dmg) {
         M(EntHealth + x) = (uint8_t)(hp - dmg);
+        comic_hit(g, x);
         return;
     }
     M(EntHealth + x) = 0; /* the enemy is defeated */
     persist_note_death(g, x);
+    comic_kill(g, x);
     if (type >= 0x70 && type < 0x80) {
         M(0xD2) = R6(0x9A7F + (type & 0x0F));
         M(0x03D8) = 0;

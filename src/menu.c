@@ -769,7 +769,7 @@ static void draw_base(Ui *ui, const uint32_t *picture, float *scale) {
             draw_options_page(&e, sound, 2, "SOUND");
             break;
         case 2:
-            draw_options_page(&e, graphics, 11, "GRAPHICS");
+            draw_options_page(&e, graphics, 12, "GRAPHICS");
             break;
         default:
             draw_controls_page(&e);
