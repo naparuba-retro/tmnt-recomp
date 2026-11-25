@@ -284,7 +284,7 @@ void player_falling(Game *g) /* B4 $A0A3: state 10 (fall) */
     player_fall_tail(g);
 }
 
-static void player_jump_start(Game *g) /* B4 $9E48: jump from the ground */
+void player_jump_start(Game *g) /* B4 $9E48: jump from the ground */
 {
     int c = (M(EntFlags) & 1) ? side_blocked_left(g) : side_blocked_right(g); /* $A0DA / $A0D3 */
     if (c) {

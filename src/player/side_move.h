@@ -12,4 +12,6 @@ void player_gravity(Game *g);
 void player_on_ground(Game *g);
 void walk_velocity(Game *g, uint8_t y);
 
+void player_jump_start(Game *g); /* B4 $9E40 */
+
 #endif

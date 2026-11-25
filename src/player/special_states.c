@@ -117,6 +117,9 @@ int player_run_state(Game *g, uint8_t s) /* B4 $9CB0: routine of state s; carry 
         case 15:
             player_swim(g);
             break; /* $A78B: swimming (special zone) */
+        case 17:
+            player_wall_climb(g);
+            break; /* $A330 */
         case 18:   /* $A404: at the top of the ladder, goes through the door */
             if (!M(WaveState)) {
                 M(EntState) = 0x0D;

@@ -8,5 +8,6 @@ typedef struct Game Game;
 
 void player_ladder(Game *g);
 void player_ladder_enter(Game *g);
+void player_wall_climb(Game *g);
 
 #endif
